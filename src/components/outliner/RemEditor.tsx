@@ -96,6 +96,22 @@ export const RemEditor: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedRemIds]);
 
+  // Child rems of activeRem (safe unconditionally before early returns)
+  const childRems = React.useMemo(() => {
+    if (!activeRem || !activeRem.childrenIds) return [];
+    return activeRem.childrenIds
+      .map((id) => rems.find((r) => r.id === id))
+      .filter(Boolean) as Rem[];
+  }, [activeRem, rems]);
+
+  // Detect embedded YouTube video (safe unconditionally before early returns)
+  const youtubeVideoId = React.useMemo(() => {
+    if (!activeRem) return null;
+    const fullText = (activeRem.text || '') + ' ' + childRems.map((r) => r.text).join(' ');
+    const match = fullText.match(/(?:youtu\.be\/|watch\?v=|embed\/)([a-zA-Z0-9_\-]{11})/);
+    return match ? match[1] : null;
+  }, [activeRem, childRems]);
+
   if (!activeRem) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-400 max-w-md mx-auto space-y-4">
@@ -160,18 +176,8 @@ export const RemEditor: React.FC = () => {
   const { linked, unlinked } = getBacklinksForRem(activeRem.id);
 
   const isFolder = activeRem.type === 'folder';
-  const childRems = (activeRem.childrenIds || [])
-    .map((id) => rems.find((r) => r.id === id))
-    .filter(Boolean) as Rem[];
   const childDocsAndFolders = childRems.filter((r) => r.type === 'document' || r.type === 'folder');
   const childBullets = childRems.filter((r) => r.type !== 'document' && r.type !== 'folder');
-
-  // Detect embedded YouTube video
-  const youtubeVideoId = React.useMemo(() => {
-    const fullText = (activeRem?.text || '') + ' ' + childRems.map((r) => r.text).join(' ');
-    const match = fullText.match(/(?:youtu\.be\/|watch\?v=|embed\/)([a-zA-Z0-9_\-]{11})/);
-    return match ? match[1] : null;
-  }, [activeRem, childRems]);
 
   const saveTitle = async () => {
     setIsEditingTitle(false);
