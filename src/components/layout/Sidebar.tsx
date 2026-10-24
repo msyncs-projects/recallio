@@ -25,7 +25,8 @@ import {
   LogIn,
   Folder,
   FolderOpen,
-  UploadCloud
+  UploadCloud,
+  GripVertical
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { Rem } from '@/types';
@@ -57,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setActiveView,
     zoomIntoRem,
     createRem,
+    moveRem,
     user,
     syncStatus,
     syncWithCloud,
@@ -66,6 +68,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedDocIds, setExpandedDocIds] = useState<Set<string>>(new Set(['doc-rea', 'doc-welcome']));
   // Dropdown menu state: 'header' | 'docs' | 'folder-[id]' | null
   const [openMenuTarget, setOpenMenuTarget] = useState<string | null>(null);
+
+  // Drag and drop states for moving documents into folders
+  const [draggedRemId, setDraggedRemId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [isRootDropTarget, setIsRootDropTarget] = useState(false);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -181,7 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   );
 
-  // Recursive Tree Item Renderer for Documents & Folders
+  // Recursive Tree Item Renderer for Documents & Folders with Drag & Drop
   const renderTreeItem = (doc: Rem, depth = 0): React.ReactNode => {
     const isFolder = doc.type === 'folder';
     const isExpanded = expandedDocIds.has(doc.id);
@@ -192,16 +199,71 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const isCurrent = activeRemId === doc.id && activeView === 'editor';
     const menuKey = `folder-${doc.id}`;
 
+    const isDraggingThis = draggedRemId === doc.id;
+    const isDropTargetThis = dropTargetId === doc.id;
+
     return (
-      <div key={doc.id} className="space-y-0.5">
+      <div
+        key={doc.id}
+        className={`space-y-0.5 transition-all ${
+          isDraggingThis ? 'opacity-30 scale-95' : ''
+        }`}
+      >
         <div
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            e.dataTransfer.setData('text/plain', doc.id);
+            e.dataTransfer.effectAllowed = 'move';
+            setDraggedRemId(doc.id);
+          }}
+          onDragEnd={(e) => {
+            e.stopPropagation();
+            setDraggedRemId(null);
+            setDropTargetId(null);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            if (draggedRemId && draggedRemId !== doc.id && dropTargetId !== doc.id) {
+              setDropTargetId(doc.id);
+            }
+          }}
+          onDragLeave={(e) => {
+            e.stopPropagation();
+            if (dropTargetId === doc.id) {
+              setDropTargetId(null);
+            }
+          }}
+          onDrop={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const sourceId = e.dataTransfer.getData('text/plain') || draggedRemId;
+            setDropTargetId(null);
+            setDraggedRemId(null);
+
+            if (!sourceId || sourceId === doc.id) return;
+
+            // If dropping onto a folder: move INSIDE that folder!
+            // If dropping onto a document: move into that document's parent!
+            const targetParentId = isFolder ? doc.id : doc.parentId;
+            const success = await moveRem(sourceId, targetParentId);
+            if (success) {
+              setExpandedDocIds((prev) => new Set(prev).add(isFolder ? doc.id : (doc.parentId || '')));
+            }
+          }}
           onClick={() => {
             zoomIntoRem(doc.id);
             setActiveView('editor');
             if (isOpenMobile) onCloseMobile();
           }}
-          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs truncate flex items-center justify-between group transition-colors cursor-pointer ${
-            isCurrent
+          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs truncate flex items-center justify-between group transition-all cursor-pointer ${
+            isDropTargetThis
+              ? isFolder
+                ? 'ring-2 ring-amber-500 bg-amber-100 dark:bg-amber-950/80 scale-[1.02] shadow-md z-10'
+                : 'ring-2 ring-blue-500 bg-blue-100 dark:bg-blue-950/80 shadow-md z-10'
+              : isCurrent
               ? isFolder
                 ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 font-semibold'
                 : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-semibold'
@@ -210,6 +272,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           style={{ paddingLeft: `${Math.max(8, depth * 14 + 8)}px` }}
         >
           <div className="flex items-center gap-1.5 min-w-0">
+            {/* Drag Handle Grip Icon on hover */}
+            <GripVertical className="w-3 h-3 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab shrink-0 -ml-1" />
+
             {/* Expand / Collapse Chevron */}
             {hasChildren || isFolder ? (
               <button
@@ -229,7 +294,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Icon */}
             {isFolder ? (
-              isExpanded ? (
+              isExpanded || isDropTargetThis ? (
                 <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               ) : (
                 <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -457,8 +522,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
 
-          {/* Documents & Folders Tree Hierarchy */}
-          <div className="space-y-1 pt-3">
+          {/* Documents & Folders Tree Hierarchy with Root Drop Target */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (draggedRemId && !isRootDropTarget) {
+                setIsRootDropTarget(true);
+              }
+            }}
+            onDragLeave={() => setIsRootDropTarget(false)}
+            onDrop={async (e) => {
+              e.preventDefault();
+              setIsRootDropTarget(false);
+              const sourceId = e.dataTransfer.getData('text/plain') || draggedRemId;
+              setDraggedRemId(null);
+              setDropTargetId(null);
+              if (sourceId) {
+                await moveRem(sourceId, null); // Moves out to root level
+              }
+            }}
+            className={`space-y-1 pt-3 transition-colors rounded-xl p-1 ${
+              isRootDropTarget ? 'bg-blue-50/70 dark:bg-blue-950/40 ring-2 ring-dashed ring-blue-500' : ''
+            }`}
+          >
             <div className="px-2 py-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
               <span>Documents & Folders ({rootDocuments.length})</span>
               <div className="relative create-dropdown-container">
@@ -486,6 +573,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Drop Indicator to move to Root */}
+            {draggedRemId && (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const sourceId = e.dataTransfer.getData('text/plain') || draggedRemId;
+                  setDraggedRemId(null);
+                  setDropTargetId(null);
+                  setIsRootDropTarget(false);
+                  if (sourceId) {
+                    await moveRem(sourceId, null);
+                  }
+                }}
+                className="mt-2 p-2 rounded-xl border-2 border-dashed border-blue-400 text-center text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/60 dark:bg-blue-950/40 animate-pulse cursor-pointer"
+              >
+                Drop here to move out to Root Level
+              </div>
+            )}
           </div>
 
           {/* Tags explorer */}

@@ -56,6 +56,7 @@ interface RemContextType {
   deleteRem: (id: string) => Promise<void>;
   indentRem: (id: string) => Promise<boolean>;
   outdentRem: (id: string) => Promise<boolean>;
+  moveRem: (sourceId: string, targetParentId: string | null, targetIndex?: number) => Promise<boolean>;
   toggleCollapse: (id: string) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   toggleTodo: (id: string) => Promise<void>;
@@ -626,6 +627,91 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
     [remMap]
   );
 
+  // Move a Rem or Document into another parent (e.g. dragging document into a folder)
+  const moveRem = useCallback(
+    async (sourceId: string, targetParentId: string | null, targetIndex?: number): Promise<boolean> => {
+      if (sourceId === targetParentId) return false;
+
+      const sourceRem = remMap.get(sourceId);
+      if (!sourceRem) return false;
+
+      // Prevent cyclical loops: cannot move a folder into its own descendants
+      if (targetParentId) {
+        let curr: Rem | undefined = remMap.get(targetParentId);
+        while (curr) {
+          if (curr.id === sourceId) return false; // Cycle detected
+          curr = curr.parentId ? remMap.get(curr.parentId) : undefined;
+        }
+      }
+
+      // If already in the target parent and no target index specified, no-op
+      if (sourceRem.parentId === targetParentId && targetIndex === undefined) {
+        return false;
+      }
+
+      const now = Date.now();
+      const updates: Rem[] = [];
+
+      // 1. Remove from old parent's childrenIds if it had a parent
+      if (sourceRem.parentId) {
+        const oldParent = remMap.get(sourceRem.parentId);
+        if (oldParent) {
+          const updatedOldParent: Rem = {
+            ...oldParent,
+            childrenIds: oldParent.childrenIds.filter((cid) => cid !== sourceId),
+            updatedAt: now,
+          };
+          updates.push(updatedOldParent);
+        }
+      }
+
+      // 2. Add to new target parent's childrenIds
+      if (targetParentId) {
+        const targetParent = updates.find((u) => u.id === targetParentId) || remMap.get(targetParentId);
+        if (targetParent) {
+          const newChildren = [...targetParent.childrenIds.filter((cid) => cid !== sourceId)];
+          if (typeof targetIndex === 'number' && targetIndex >= 0) {
+            newChildren.splice(targetIndex, 0, sourceId);
+          } else {
+            newChildren.push(sourceId);
+          }
+          const updatedTargetParent: Rem = {
+            ...targetParent,
+            childrenIds: newChildren,
+            isCollapsed: false, // auto-expand folder so the moved item is immediately visible
+            updatedAt: now,
+          };
+          const existingIdx = updates.findIndex((u) => u.id === targetParentId);
+          if (existingIdx !== -1) {
+            updates[existingIdx] = updatedTargetParent;
+          } else {
+            updates.push(updatedTargetParent);
+          }
+        }
+      }
+
+      // 3. Update source Rem's parentId
+      const updatedSourceRem: Rem = {
+        ...sourceRem,
+        parentId: targetParentId,
+        updatedAt: now,
+      };
+      updates.push(updatedSourceRem);
+
+      // Persist to Dexie
+      await db.rems.bulkPut(updates);
+
+      // Update React state
+      setRems((prev) => {
+        const updateMap = new Map(updates.map((u) => [u.id, u]));
+        return prev.map((r) => updateMap.get(r.id) || r);
+      });
+
+      return true;
+    },
+    [remMap]
+  );
+
   // Toggle Collapse
   const toggleCollapse = useCallback(
     async (id: string) => {
@@ -845,6 +931,7 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
         deleteRem,
         indentRem,
         outdentRem,
+        moveRem,
         toggleCollapse,
         togglePin,
         toggleTodo,
