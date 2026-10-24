@@ -308,7 +308,10 @@ export const RemEditor: React.FC = () => {
               <>
                 <button
                   type="button"
-                  onClick={() => createRem(activeRem.id, undefined, 'Untitled Note', 'document')}
+                  onClick={async () => {
+                    const newId = await createRem(activeRem.id, undefined, 'Untitled Note', 'document');
+                    setActiveRemId(newId);
+                  }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50 hover:bg-blue-100 transition-colors cursor-pointer"
                   title="Create a new document inside this folder"
                 >
@@ -317,7 +320,10 @@ export const RemEditor: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => createRem(activeRem.id, undefined, 'New Folder', 'folder')}
+                  onClick={async () => {
+                    const newId = await createRem(activeRem.id, undefined, 'New Folder', 'folder');
+                    setActiveRemId(newId);
+                  }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 hover:bg-amber-100 transition-colors cursor-pointer"
                   title="Create a new subfolder inside this folder"
                 >
@@ -505,7 +511,10 @@ export const RemEditor: React.FC = () => {
               <div className="flex items-center justify-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => createRem(activeRem.id, undefined, 'Untitled Note', 'document')}
+                  onClick={async () => {
+                    const newId = await createRem(activeRem.id, undefined, 'Untitled Note', 'document');
+                    setActiveRemId(newId);
+                  }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -513,7 +522,10 @@ export const RemEditor: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => createRem(activeRem.id, undefined, 'New Folder', 'folder')}
+                  onClick={async () => {
+                    const newId = await createRem(activeRem.id, undefined, 'New Folder', 'folder');
+                    setActiveRemId(newId);
+                  }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors cursor-pointer"
                 >
                   <Folder className="w-3.5 h-3.5" />
