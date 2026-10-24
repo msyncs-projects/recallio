@@ -19,7 +19,8 @@ import {
   Video,
   FileUp,
   Globe,
-  Wand2
+  Wand2,
+  Trash2
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { Rem } from '@/types';
@@ -35,6 +36,7 @@ export const RemEditor: React.FC = () => {
     zoomIntoRem,
     updateRemText,
     createRem,
+    deleteRem,
     togglePin,
     cards,
     currentTime,
@@ -131,6 +133,21 @@ export const RemEditor: React.FC = () => {
   const handleStudyDocument = () => {
     setStudyDeckId(activeRem.id);
     setActiveView('flashcards');
+  };
+
+  const handleDeleteActiveRem = async () => {
+    if (!activeRem) return;
+    const isFolder = activeRem.type === 'folder';
+    const typeLabel = isFolder ? 'Ordner' : 'Dokument';
+    const name = activeRem.text.split('::')[0].trim() || (isFolder ? 'Unbenannter Ordner' : 'Unbenanntes Dokument');
+    const hasChildren = activeRem.childrenIds && activeRem.childrenIds.length > 0;
+    const confirmMsg = hasChildren
+      ? `Möchtest du den ${typeLabel} "${name}" und alle darin enthaltenen Notizen & Karteikarten wirklich löschen?`
+      : `Möchtest du das ${typeLabel} "${name}" wirklich löschen?`;
+
+    if (window.confirm(confirmMsg)) {
+      await deleteRem(activeRem.id);
+    }
   };
 
   return (
@@ -270,6 +287,16 @@ export const RemEditor: React.FC = () => {
             >
               <Pin className="w-4 h-4" />
             </button>
+
+            {/* Delete Document or Folder */}
+            <button
+              type="button"
+              onClick={handleDeleteActiveRem}
+              className="p-2 rounded-lg text-xs text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+              title={isFolder ? 'Diesen Ordner löschen' : 'Dieses Dokument löschen'}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -355,22 +382,44 @@ export const RemEditor: React.FC = () => {
                     onClick={() => zoomIntoRem(child.id)}
                     className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg shrink-0 ${
-                        isChildFolder
-                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
-                          : 'bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400'
-                      }`}>
-                        {isChildFolder ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-semibold text-xs text-zinc-900 dark:text-white truncate group-hover:text-blue-500 transition-colors">
-                          {child.text.split('::')[0].trim() || (isChildFolder ? 'Untitled Folder' : 'Untitled Note')}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className={`p-2 rounded-lg shrink-0 ${
+                          isChildFolder
+                            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+                            : 'bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400'
+                        }`}>
+                          {isChildFolder ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                         </div>
-                        <div className="text-[11px] text-zinc-400 capitalize">
-                          {child.type}
+                        <div className="min-w-0">
+                          <div className="font-semibold text-xs text-zinc-900 dark:text-white truncate group-hover:text-blue-500 transition-colors">
+                            {child.text.split('::')[0].trim() || (isChildFolder ? 'Untitled Folder' : 'Untitled Note')}
+                          </div>
+                          <div className="text-[11px] text-zinc-400 capitalize">
+                            {child.type}
+                          </div>
                         </div>
                       </div>
+
+                      {/* Delete child button on hover */}
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const childName = child.text.split('::')[0].trim() || (isChildFolder ? 'Ordner' : 'Dokument');
+                          const childHasChildren = child.childrenIds && child.childrenIds.length > 0;
+                          const confirmMsg = childHasChildren
+                            ? `Möchtest du "${childName}" und alle Unterelemente wirklich löschen?`
+                            : `Möchtest du "${childName}" wirklich löschen?`;
+                          if (window.confirm(confirmMsg)) {
+                            await deleteRem(child.id);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer shrink-0"
+                        title={isChildFolder ? 'Ordner löschen' : 'Dokument löschen'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
 
                     {childCardsCount > 0 && (

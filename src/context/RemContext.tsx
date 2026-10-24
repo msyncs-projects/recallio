@@ -539,8 +539,20 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
           )
       );
       setCards((prev) => prev.filter((c) => !toDeleteIds.includes(c.remId)));
+
+      // Switch activeRemId if current document or one of its ancestors was deleted
+      if (toDeleteIds.includes(activeRemId)) {
+        const remainingDocs = rems.filter(
+          (r) => !toDeleteIds.includes(r.id) && (r.parentId === null || r.type === 'document' || r.type === 'folder')
+        );
+        if (remainingDocs.length > 0) {
+          setActiveRemId(remainingDocs[0].id);
+        } else {
+          setActiveRemId('');
+        }
+      }
     },
-    [remMap, cards]
+    [remMap, cards, rems, activeRemId]
   );
 
   // Indent Rem (Tab key): Make this Rem the child of its previous sibling

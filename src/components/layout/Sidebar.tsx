@@ -26,7 +26,8 @@ import {
   Folder,
   FolderOpen,
   UploadCloud,
-  GripVertical
+  GripVertical,
+  Trash2
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { Rem } from '@/types';
@@ -59,6 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     zoomIntoRem,
     createRem,
     moveRem,
+    deleteRem,
     user,
     syncStatus,
     syncWithCloud,
@@ -68,6 +70,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedDocIds, setExpandedDocIds] = useState<Set<string>>(new Set(['doc-rea', 'doc-welcome']));
   // Dropdown menu state: 'header' | 'docs' | 'folder-[id]' | null
   const [openMenuTarget, setOpenMenuTarget] = useState<string | null>(null);
+
+  const handleDeleteItem = async (e: React.MouseEvent, doc: Rem) => {
+    e.stopPropagation();
+    const isFolder = doc.type === 'folder';
+    const typeLabel = isFolder ? 'Ordner' : 'Dokument';
+    const name = doc.text.split('::')[0].trim() || (isFolder ? 'Unbenannter Ordner' : 'Unbenanntes Dokument');
+    const hasChildren = doc.childrenIds && doc.childrenIds.length > 0;
+    const confirmMsg = hasChildren
+      ? `Möchtest du den ${typeLabel} "${name}" und alle darin enthaltenen Notizen & Karteikarten wirklich löschen?`
+      : `Möchtest du das ${typeLabel} "${name}" wirklich löschen?`;
+
+    if (window.confirm(confirmMsg)) {
+      await deleteRem(doc.id);
+    }
+  };
 
   // Drag and drop states for moving documents into folders
   const [draggedRemId, setDraggedRemId] = useState<string | null>(null);
@@ -310,24 +327,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Action buttons on hover */}
-          {isFolder && (
-            <div className="relative create-dropdown-container">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpenMenuTarget(openMenuTarget === menuKey ? null : menuKey);
-                }}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-amber-600 rounded transition-all cursor-pointer"
-                title="Add Document or Folder inside"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-              {openMenuTarget === menuKey && (
-                <CreateDropdown parentId={doc.id} />
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
+            {isFolder && (
+              <div className="relative create-dropdown-container">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenMenuTarget(openMenuTarget === menuKey ? null : menuKey);
+                  }}
+                  className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-amber-600 rounded transition-all cursor-pointer"
+                  title="Dokument oder Unterordner hinzufügen"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+                {openMenuTarget === menuKey && (
+                  <CreateDropdown parentId={doc.id} />
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={(e) => handleDeleteItem(e, doc)}
+              className="p-1 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-all cursor-pointer"
+              title={isFolder ? 'Ordner löschen' : 'Dokument löschen'}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
         </div>
 
         {/* Children indented */}
