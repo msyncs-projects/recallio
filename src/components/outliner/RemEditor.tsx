@@ -189,6 +189,21 @@ export const RemEditor: React.FC = () => {
     if (e.key === 'Enter') {
       e.preventDefault();
       await saveTitle();
+      setTimeout(() => {
+        if (activeRem && activeRem.type !== 'folder') {
+          if (activeRem.childrenIds && activeRem.childrenIds.length > 0) {
+            const firstInput = document.getElementById(`rem-input-${activeRem.childrenIds[0]}`);
+            if (firstInput) firstInput.focus();
+          } else {
+            createRem(activeRem.id, undefined, '', 'bullet').then((id) => {
+              setTimeout(() => {
+                const el = document.getElementById(`rem-input-${id}`);
+                if (el) el.focus();
+              }, 50);
+            });
+          }
+        }
+      }, 50);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       if (activeRem) setTitleText(activeRem.text);

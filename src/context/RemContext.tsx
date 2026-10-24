@@ -507,7 +507,25 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
         updatedAt: now,
       };
 
-      await db.rems.put(newRem);
+      const remsToAdd: Rem[] = [newRem];
+      if (type === 'document') {
+        const childId = `rem-${now + 1}-${Math.random().toString(36).substring(2, 7)}`;
+        const childRem: Rem = {
+          id: childId,
+          text: '',
+          parentId: newId,
+          childrenIds: [],
+          type: 'bullet',
+          isCollapsed: false,
+          tags: [],
+          createdAt: now + 1,
+          updatedAt: now + 1,
+        };
+        newRem.childrenIds = [childId];
+        remsToAdd.push(childRem);
+      }
+
+      await db.rems.bulkPut(remsToAdd);
 
       if (parentId) {
         const parent = remMap.get(parentId);
@@ -531,12 +549,12 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
           };
 
           await db.rems.put(updatedParent);
-          setRems((prev) => [...prev.map((r) => (r.id === parentId ? updatedParent : r)), newRem]);
+          setRems((prev) => [...prev.map((r) => (r.id === parentId ? updatedParent : r)), ...remsToAdd]);
           return newId;
         }
       }
 
-      setRems((prev) => [...prev, newRem]);
+      setRems((prev) => [...prev, ...remsToAdd]);
       return newId;
     },
     [remMap]
