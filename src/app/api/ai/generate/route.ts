@@ -116,8 +116,51 @@ export async function POST(req: NextRequest) {
 
     const provider: AiProvider = config?.provider || (process.env.GEMINI_API_KEY ? 'gemini' : 'builtin');
     const apiKey = config?.apiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || '';
-    const model = config?.model || (provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash');
+    let model = config?.model || (provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash');
     const baseUrl = config?.baseUrl || '';
+
+    // Auto-alias deprecated models to recommended current versions
+    if (provider === 'gemini') {
+      if (model.includes('gemini-2.0') || model === 'gemini-2.0-flash') {
+        model = 'gemini-3.8-flash';
+      }
+    }
+
+    // SSRF protection: block private/internal addresses in baseUrl
+    if (baseUrl) {
+      try {
+        const parsedUrl = new URL(baseUrl);
+        const host = parsedUrl.hostname.toLowerCase();
+        if (
+          host === 'localhost' ||
+          host === '127.0.0.1' ||
+          host === '::1' ||
+          host.startsWith('10.') ||
+          host.startsWith('192.168.') ||
+          host.startsWith('172.16.') ||
+          host.startsWith('172.17.') ||
+          host.startsWith('172.18.') ||
+          host.startsWith('172.19.') ||
+          host.startsWith('172.20.') ||
+          host.startsWith('172.21.') ||
+          host.startsWith('172.22.') ||
+          host.startsWith('172.23.') ||
+          host.startsWith('172.24.') ||
+          host.startsWith('172.25.') ||
+          host.startsWith('172.26.') ||
+          host.startsWith('172.27.') ||
+          host.startsWith('172.28.') ||
+          host.startsWith('172.29.') ||
+          host.startsWith('172.30.') ||
+          host.startsWith('172.31.') ||
+          host === '169.254.169.254'
+        ) {
+          return NextResponse.json({ error: 'Private or local IP endpoints are blocked for security.' }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Invalid custom base URL format.' }, { status: 400 });
+      }
+    }
 
     // Quick connection test mode for Settings BYOK verification
     if (mode === 'test') {
@@ -214,15 +257,45 @@ Output strictly as a JSON object:
           }
         );
 
-        if (geminiRes.ok) {
-          const geminiData = await geminiRes.json();
+        let responseToUse = geminiRes;
+        if (!responseToUse.ok && model !== 'gemini-1.5-flash') {
+          // Automatic graceful retry with standard gemini-1.5-flash fallback
+          const fallbackRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      { text: `${RECALLIO_MASTER_SYSTEM_PROMPT}\n\n${taskInstruction}` },
+                      { text: userPrompt },
+                    ],
+                  },
+                ],
+                generationConfig: {
+                  temperature: 0.2,
+                  maxOutputTokens: 1500,
+                },
+              }),
+            }
+          );
+          if (fallbackRes.ok) {
+            responseToUse = fallbackRes;
+            model = 'gemini-1.5-flash';
+          }
+        }
+
+        if (responseToUse.ok) {
+          const geminiData = await responseToUse.json();
           const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
           const cleanedJson = rawText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
           const parsed = JSON.parse(cleanedJson);
           return NextResponse.json({ success: true, provider: 'gemini', model, data: parsed });
         } else {
-          const errData = await geminiRes.json().catch(() => ({}));
-          throw new Error(errData?.error?.message || `Gemini API returned ${geminiRes.status}`);
+          const errData = await responseToUse.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Gemini API returned ${responseToUse.status}`);
         }
       } catch (geminiErr: any) {
         if (mode === 'test') {

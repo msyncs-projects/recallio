@@ -103,8 +103,18 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // 2. Upsert Rems
+      // 2. Upsert Rems with strict ownership verification (IDOR protection)
       for (const rem of rems) {
+        const existingRem = await tx.rem.findUnique({
+          where: { id: rem.id },
+          select: { userId: true },
+        });
+
+        if (existingRem && existingRem.userId !== authUser.userId) {
+          // Cross-tenant protection: prevent overwriting another user's note
+          continue;
+        }
+
         await tx.rem.upsert({
           where: { id: rem.id },
           create: {
@@ -137,8 +147,18 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // 3. Upsert Cards
+      // 3. Upsert Cards with strict ownership verification (IDOR protection)
       for (const card of cards) {
+        const existingCard = await tx.card.findUnique({
+          where: { id: card.id },
+          select: { userId: true },
+        });
+
+        if (existingCard && existingCard.userId !== authUser.userId) {
+          // Cross-tenant protection: prevent overwriting another user's card
+          continue;
+        }
+
         await tx.card.upsert({
           where: { id: card.id },
           create: {

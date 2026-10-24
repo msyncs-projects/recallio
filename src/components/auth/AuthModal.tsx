@@ -14,6 +14,7 @@ import {
   Cloud 
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
+import { RecallioLogo } from '@/components/ui/RecallioLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -77,9 +78,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Sparkles className="w-4 h-4" />
-            </div>
+            <RecallioLogo size={32} />
             <div>
               <h2 className="text-base font-bold text-zinc-900 dark:text-white">
                 {mode === 'signin' ? 'Welcome Back' : 'Create Account'}

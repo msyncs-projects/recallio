@@ -42,8 +42,8 @@ export function parseCardsFromText(remId: string, text: string): ParsedCardDraft
     return drafts;
   }
 
-  // 2. Check for Bidirectional cards: <-> or ::: or ==
-  const bidirectionalDelimiters = [' <-> ', ' ::: ', ' == '];
+  // 2. Check for Bidirectional cards: ' ::: ' or ' <-> ' (strict RemNote syntax)
+  const bidirectionalDelimiters = [' ::: ', ' <-> '];
   for (const delim of bidirectionalDelimiters) {
     if (text.includes(delim)) {
       const parts = text.split(delim);
@@ -72,24 +72,21 @@ export function parseCardsFromText(remId: string, text: string): ParsedCardDraft
     }
   }
 
-  // 3. Check for Concept-Descriptor (:: or >> or ;;)
-  const conceptDelimiters = [' :: ', '::', ' >> ', '>>', ' ;; ', ';;'];
-  for (const delim of conceptDelimiters) {
-    if (text.includes(delim)) {
-      const parts = text.split(delim);
-      if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
-        const front = parts[0].trim();
-        const back = parts.slice(1).join(delim).trim();
+  // 3. Check for Concept-Descriptor: strictly ' :: ' with surrounding spaces (prevents C++ :: or URLs)
+  if (text.includes(' :: ')) {
+    const parts = text.split(' :: ');
+    if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+      const front = parts[0].trim();
+      const back = parts.slice(1).join(' :: ').trim();
 
-        drafts.push({
-          idSuffix: 'concept',
-          type: 'concept_descriptor',
-          front,
-          back,
-        });
+      drafts.push({
+        idSuffix: 'concept',
+        type: 'concept_descriptor',
+        front,
+        back,
+      });
 
-        return drafts;
-      }
+      return drafts;
     }
   }
 

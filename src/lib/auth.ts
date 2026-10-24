@@ -3,8 +3,12 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 
+const rawSecret = process.env.JWT_SECRET;
+if (!rawSecret && process.env.NODE_ENV === 'production') {
+  console.warn('[SECURITY WARNING] JWT_SECRET is not set in environment variables.');
+}
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'mnemoflow-super-secret-jwt-encryption-key-production-safe-2026'
+  rawSecret || 'recallio-default-dev-secret-do-not-use-in-production'
 );
 
 export interface JWTPayload {

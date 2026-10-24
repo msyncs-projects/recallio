@@ -106,22 +106,53 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
     baseUrl: '',
   });
 
-  // Pull cloud notes and update local DB
+  // Pull cloud notes and merge safely with local DB (prevents data loss)
   const pullCloudData = useCallback(async () => {
     try {
       setSyncStatus('syncing');
       const res = await fetch('/api/sync');
       if (res.ok) {
         const data = await res.json();
-        if (data.rems && data.rems.length > 0) {
+        if (data.rems) {
+          const localRems = await db.rems.toArray();
+          const localCards = await db.cards.toArray();
+
+          const cloudRemMap = new Map(data.rems.map((r: Rem) => [r.id, r]));
+          const cloudCardMap = new Map((data.cards || []).map((c: Card) => [c.id, c]));
+
+          // Preserve un-synced local documents
+          const mergedRems: Rem[] = [...data.rems];
+          for (const local of localRems) {
+            if (!cloudRemMap.has(local.id)) {
+              mergedRems.push(local);
+            }
+          }
+
+          const mergedCards: Card[] = [...(data.cards || [])];
+          for (const local of localCards) {
+            if (!cloudCardMap.has(local.id)) {
+              mergedCards.push(local);
+            }
+          }
+
           await db.transaction('rw', db.rems, db.cards, async () => {
             await db.rems.clear();
             await db.cards.clear();
-            await db.rems.bulkAdd(data.rems);
-            if (data.cards) await db.cards.bulkAdd(data.cards);
+            await db.rems.bulkAdd(mergedRems);
+            if (mergedCards.length > 0) await db.cards.bulkAdd(mergedCards);
           });
-          setRems(data.rems);
-          setCards(data.cards || []);
+
+          setRems(mergedRems);
+          setCards(mergedCards);
+
+          // If user had local notes created before login, sync them to cloud now
+          if (mergedRems.length > data.rems.length) {
+            await fetch('/api/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ rems: mergedRems, cards: mergedCards }),
+            });
+          }
         }
         setSyncStatus('synced');
       } else {

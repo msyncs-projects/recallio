@@ -7,6 +7,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Valid URL starting with http:// or https:// is required' }, { status: 400 });
     }
 
+    // SSRF Protection: Parse & block loopback, cloud metadata, and RFC 1918 private subnets
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return NextResponse.json({ error: 'Malformed URL' }, { status: 400 });
+    }
+
+    const host = parsedUrl.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host === '169.254.169.254' ||
+      host.endsWith('.internal') ||
+      host.endsWith('.local') ||
+      host.startsWith('10.') ||
+      host.startsWith('192.168.') ||
+      host.startsWith('172.16.') ||
+      host.startsWith('172.17.') ||
+      host.startsWith('172.18.') ||
+      host.startsWith('172.19.') ||
+      host.startsWith('172.20.') ||
+      host.startsWith('172.21.') ||
+      host.startsWith('172.22.') ||
+      host.startsWith('172.23.') ||
+      host.startsWith('172.24.') ||
+      host.startsWith('172.25.') ||
+      host.startsWith('172.26.') ||
+      host.startsWith('172.27.') ||
+      host.startsWith('172.28.') ||
+      host.startsWith('172.29.') ||
+      host.startsWith('172.30.') ||
+      host.startsWith('172.31.')
+    ) {
+      return NextResponse.json({ error: 'Requests to internal or private addresses are prohibited.' }, { status: 403 });
+    }
+
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',

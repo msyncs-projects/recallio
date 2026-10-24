@@ -37,7 +37,7 @@ export const FlashcardReview: React.FC = () => {
   const [studyAheadMode, setStudyAheadMode] = useState(false);
   const [sessionCardsCount, setSessionCardsCount] = useState(0);
 
-  // Initialize review queue
+  // Initialize review queue on mount or when deck / study-ahead mode changes
   useEffect(() => {
     let targetCards: Card[] = [];
 
@@ -58,7 +58,8 @@ export const FlashcardReview: React.FC = () => {
     setCurrentIndex(0);
     setIsFlipped(false);
     setSessionCompleted(targetCards.length === 0);
-  }, [dueCards, cards, studyAheadMode, studyDeckId, rems]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyAheadMode, studyDeckId]);
 
   const currentCard: Card | undefined = queue[currentIndex];
 

@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { Rem } from '@/types';
+import { RecallioLogo } from '@/components/ui/RecallioLogo';
 
 interface SidebarProps {
   onOpenSearch: () => void;
@@ -105,7 +106,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, [openMenuTarget]);
 
   // Root documents and folders
-  const rootDocuments = rems.filter((r) => r.parentId === null);
+  // Root level items in sidebar: strictly documents and folders
+  const rootDocuments = rems.filter((r) => r.parentId === null && (r.type === 'document' || r.type === 'folder'));
   const pinnedDocuments = rems.filter((r) => r.isPinned);
 
   // Extract all unique tags
@@ -212,7 +214,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const childRems = doc.childrenIds
       ? (doc.childrenIds.map((cid) => rems.find((r) => r.id === cid)).filter(Boolean) as Rem[])
       : [];
-    const hasChildren = childRems.length > 0;
+    // Only display subdocuments and subfolders in sidebar hierarchy - normal note bullets stay inside editor!
+    const childDocs = childRems.filter((r) => r.type === 'document' || r.type === 'folder');
+    const hasChildren = childDocs.length > 0;
     const isCurrent = activeRemId === doc.id && activeView === 'editor';
     const menuKey = `folder-${doc.id}`;
 
@@ -358,10 +362,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Children indented */}
+        {/* Children indented (only documents and folders) */}
         {isExpanded && hasChildren && (
           <div className="space-y-0.5 border-l border-zinc-200 dark:border-zinc-800/80 ml-3">
-            {childRems.map((child) => renderTreeItem(child, depth + 1))}
+            {childDocs.map((child) => renderTreeItem(child, depth + 1))}
           </div>
         )}
       </div>
@@ -383,22 +387,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {/* Brand Header */}
+        {/* Brand Header with Modern Logo */}
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-extrabold text-sm text-zinc-900 dark:text-white tracking-tight flex items-center gap-1.5">
-                <span>Recallio</span>
-              </div>
-              <div className="text-[10px] text-zinc-400 font-medium flex items-center gap-1">
-                <HardDrive className="w-2.5 h-2.5 text-emerald-500" />
-                <span>Outliner & Spaced Repetition</span>
-              </div>
-            </div>
-          </div>
+          <RecallioLogo showText size={34} subtitle="Outliner & Active Recall" />
 
           <div className="relative create-dropdown-container">
             <button

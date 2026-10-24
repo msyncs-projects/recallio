@@ -156,9 +156,11 @@ export const KnowledgeGraph: React.FC = () => {
         .map((n) => n.id)
     );
 
-    // Stable, smooth force simulation (no vibration or jitter)
+    // Stable, smooth force simulation with alpha cooling to prevent vibration & infinite loop
+    let alpha = 1.0;
+
     const simulate = () => {
-      // 1. Repulsion between all nodes (smooth inverse-square with distance damping)
+      // 1. Repulsion between all nodes
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const a = nodes[i];
@@ -168,9 +170,8 @@ export const KnowledgeGraph: React.FC = () => {
           const distSq = dx * dx + dy * dy || 1;
           const dist = Math.sqrt(distSq);
 
-          if (dist < 280) {
-            // Soft-capped force curve prevents explosion
-            const force = Math.min(2.5, 900 / (distSq + 300));
+          if (dist < 260) {
+            const force = Math.min(2.0, 750 / (distSq + 350)) * alpha;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
             a.vx = (a.vx || 0) - fx;
@@ -189,8 +190,8 @@ export const KnowledgeGraph: React.FC = () => {
           const dx = (targetNode.x || 0) - (sourceNode.x || 0);
           const dy = (targetNode.y || 0) - (sourceNode.y || 0);
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const targetDist = link.type === 'reference' ? 110 : 65;
-          const spring = Math.max(-2, Math.min(2, (dist - targetDist) * 0.015));
+          const targetDist = link.type === 'reference' ? 100 : 60;
+          const spring = Math.max(-1.5, Math.min(1.5, (dist - targetDist) * 0.012)) * alpha;
           const fx = (dx / dist) * spring;
           const fy = (dy / dist) * spring;
 
@@ -201,28 +202,29 @@ export const KnowledgeGraph: React.FC = () => {
         }
       });
 
-      // 3. Central gravity, velocity clamping & high damping (prevents oscillations)
+      // 3. Central gravity, velocity clamping & high damping (equilibrium halt)
+      let totalMovement = 0;
       nodes.forEach((n) => {
         if (n !== draggedNode) {
-          // Central attraction
-          n.vx = ((n.vx || 0) * 0.82) - (n.x || 0) * 0.0015;
-          n.vy = ((n.vy || 0) * 0.82) - (n.y || 0) * 0.0015;
+          // Damping & central attraction
+          n.vx = ((n.vx || 0) * 0.74) - (n.x || 0) * 0.002;
+          n.vy = ((n.vy || 0) * 0.74) - (n.y || 0) * 0.002;
 
-          // Velocity deadzone to eliminate vibration/shaking
-          if (Math.abs(n.vx) < 0.015) n.vx = 0;
-          if (Math.abs(n.vy) < 0.015) n.vy = 0;
+          // Deadzone threshold halts jitter
+          if (Math.abs(n.vx) < 0.04) n.vx = 0;
+          if (Math.abs(n.vy) < 0.04) n.vy = 0;
 
-          // Clamp max speed
+          totalMovement += Math.abs(n.vx) + Math.abs(n.vy);
+
           const speed = Math.hypot(n.vx, n.vy);
-          if (speed > 5) {
-            n.vx = (n.vx / speed) * 5;
-            n.vy = (n.vy / speed) * 5;
+          if (speed > 4) {
+            n.vx = (n.vx / speed) * 4;
+            n.vy = (n.vy / speed) * 4;
           }
 
           n.x = (n.x || 0) + n.vx;
           n.y = (n.y || 0) + n.vy;
 
-          // Sync back to persistent physics ref
           const saved = nodePhysicsRef.current.get(n.id);
           if (saved) {
             saved.x = n.x;
@@ -232,11 +234,18 @@ export const KnowledgeGraph: React.FC = () => {
           }
         }
       });
+
+      if (totalMovement < 0.05 && !draggedNode) {
+        alpha = 0; // Reached equilibrium: complete stop
+      }
     };
 
     // Render loop
     const render = () => {
-      simulate();
+      if (alpha > 0.001 || draggedNode || isDragging) {
+        simulate();
+        alpha *= 0.985;
+      }
 
       const dpr = window.devicePixelRatio || 1;
       const width = canvas.width / dpr;
@@ -352,8 +361,10 @@ export const KnowledgeGraph: React.FC = () => {
 
       if (clicked) {
         draggedNode = clicked;
+        alpha = 0.8;
       } else {
         isDragging = true;
+        alpha = 0.6;
         dragStartX = clientX - cameraX;
         dragStartY = clientY - cameraY;
       }
@@ -417,6 +428,7 @@ export const KnowledgeGraph: React.FC = () => {
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
       zoom = Math.max(0.2, Math.min(3, zoom * zoomFactor));
       cameraRef.current.zoom = zoom;
+      alpha = 0.5;
     };
 
     canvas.addEventListener('mousedown', handleMouseDown);

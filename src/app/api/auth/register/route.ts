@@ -47,16 +47,20 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Populate initial seed notes (REA Framework & Tutorial) for this user in PostgreSQL
+    // Populate initial seed notes for this user with unique user-scoped IDs (prevents DB collisions)
     const { rems: seedRems, cards: seedCards } = getInitialSeedData();
+    const idMap = new Map<string, string>();
+    seedRems.forEach((r) => {
+      idMap.set(r.id, `${user.id}_${r.id}`);
+    });
 
     await prisma.rem.createMany({
       data: seedRems.map((r) => ({
-        id: r.id,
+        id: idMap.get(r.id)!,
         userId: user.id,
         text: r.text,
-        parentId: r.parentId,
-        childrenIds: r.childrenIds,
+        parentId: r.parentId ? idMap.get(r.parentId) || null : null,
+        childrenIds: (r.childrenIds || []).map((ch) => idMap.get(ch) || ch),
         type: r.type,
         isCollapsed: r.isCollapsed,
         tags: r.tags,
@@ -70,9 +74,9 @@ export async function POST(req: NextRequest) {
 
     await prisma.card.createMany({
       data: seedCards.map((c) => ({
-        id: c.id,
+        id: `${user.id}_${c.id}`,
         userId: user.id,
-        remId: c.remId,
+        remId: idMap.get(c.remId) || c.remId,
         type: c.type,
         front: c.front,
         back: c.back,

@@ -35,8 +35,8 @@ export const AiSettingsPanel: React.FC = () => {
   const modelPresets: Record<AiProvider, Array<{ id: string; name: string; badge?: string }>> = {
     gemini: [
       { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', badge: 'Recommended • Fast & Free' },
+      { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', badge: 'Latest • Next-Gen Speed' },
       { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', badge: 'Deep Reasoning' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', badge: 'Next-Gen Speed' },
     ],
     openai: [
       { id: 'gpt-4o-mini', name: 'GPT-4o Mini', badge: 'Recommended • Fast & Affordable' },

@@ -23,6 +23,8 @@ interface RemItemProps {
   isLastSibling?: boolean;
   onOpenAiModal?: (mode: 'flashcards' | 'summary' | 'expand', remId?: string) => void;
   onOpenImportModal?: (type: 'pdf' | 'web' | 'youtube', remId?: string) => void;
+  isSelected?: boolean;
+  onToggleSelect?: (remId: string, multi: boolean) => void;
 }
 
 export const RemItem: React.FC<RemItemProps> = ({
@@ -30,6 +32,8 @@ export const RemItem: React.FC<RemItemProps> = ({
   depth = 0,
   onOpenAiModal,
   onOpenImportModal,
+  isSelected = false,
+  onToggleSelect,
 }) => {
   const {
     rems,
@@ -377,13 +381,47 @@ export const RemItem: React.FC<RemItemProps> = ({
     }, 20);
   };
 
-  // Render nicely formatted elements (highlight ::, {{cloze}}, [[links]])
+  // Helper to render inline markdown within plain text segments (**bold**, *italic*, `code`, ==highlight==, ~~strike~~)
+  const renderMarkdownInline = (text: string) => {
+    if (!text) return '';
+    const mdRegex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|==[^=]+==|~~[^~]+~~)/g;
+    const tokens = text.split(mdRegex);
+
+    return tokens.map((token, i) => {
+      if (token.startsWith('**') && token.endsWith('**') && token.length > 4) {
+        return <strong key={i} className="font-bold text-zinc-900 dark:text-zinc-50">{token.slice(2, -2)}</strong>;
+      }
+      if (token.startsWith('*') && token.endsWith('*') && token.length > 2) {
+        return <em key={i} className="italic text-zinc-800 dark:text-zinc-200">{token.slice(1, -1)}</em>;
+      }
+      if (token.startsWith('`') && token.endsWith('`') && token.length > 2) {
+        return (
+          <code key={i} className="px-1.5 py-0.5 mx-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-mono text-xs text-rose-600 dark:text-rose-400 border border-zinc-200 dark:border-zinc-700">
+            {token.slice(1, -1)}
+          </code>
+        );
+      }
+      if (token.startsWith('==') && token.endsWith('==') && token.length > 4) {
+        return (
+          <mark key={i} className="px-1 py-0.5 mx-0.5 rounded bg-amber-200/90 dark:bg-amber-900/60 text-zinc-900 dark:text-zinc-100">
+            {token.slice(2, -2)}
+          </mark>
+        );
+      }
+      if (token.startsWith('~~') && token.endsWith('~~') && token.length > 4) {
+        return <del key={i} className="line-through text-zinc-400 dark:text-zinc-500">{token.slice(2, -2)}</del>;
+      }
+      return token;
+    });
+  };
+
+  // Render nicely formatted elements (highlight ::, {{cloze}}, [[links]], and markdown)
   const renderRichText = (text: string) => {
     if (!text || text.trim() === '') {
       return <span className="text-zinc-400 dark:text-zinc-500 italic text-sm">Empty rem...</span>;
     }
 
-    // Format concept-definition (:: or >>)
+    // Format concept-definition (strict ' ::: ' or ' :: ')
     const conceptDelim = text.includes(' ::: ')
       ? ' ::: '
       : text.includes(' :: ')
@@ -398,7 +436,7 @@ export const RemItem: React.FC<RemItemProps> = ({
 
       return (
         <div className="flex flex-wrap items-center gap-1.5 leading-relaxed text-sm">
-          <span className="font-semibold text-zinc-900 dark:text-zinc-100">{front}</span>
+          <span className="font-semibold text-zinc-900 dark:text-zinc-100">{renderMarkdownInline(front)}</span>
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
             {conceptDelim.trim()}
           </span>
@@ -454,7 +492,7 @@ export const RemItem: React.FC<RemItemProps> = ({
           </span>
         );
       }
-      return <span key={idx}>{part}</span>;
+      return <span key={idx}>{renderMarkdownInline(part)}</span>;
     });
   };
 
@@ -467,7 +505,7 @@ export const RemItem: React.FC<RemItemProps> = ({
       : '';
 
   return (
-    <div className="relative group/rem">
+    <div className={`relative group/rem transition-colors ${isSelected ? 'bg-blue-50/70 dark:bg-blue-950/40 ring-1 ring-blue-500/50 rounded-xl px-1' : ''}`}>
       {/* Indentation Guidelines */}
       {depth > 0 && (
         <div
@@ -476,6 +514,33 @@ export const RemItem: React.FC<RemItemProps> = ({
       )}
 
       <div className="flex items-start gap-1 py-1 px-1 rounded-md hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition-colors">
+        {/* Selection Checkbox (visible on hover or when selected) */}
+        {onToggleSelect && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect(rem.id, e.shiftKey);
+            }}
+            className={`w-4 h-6 flex items-center justify-center shrink-0 transition-opacity cursor-pointer ${
+              isSelected
+                ? 'opacity-100 text-blue-600 dark:text-blue-400'
+                : 'opacity-0 group-hover/rem:opacity-60 hover:!opacity-100 text-zinc-400'
+            }`}
+            title="Select Rem (Shift+Click to multi-select)"
+          >
+            <div
+              className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all ${
+                isSelected
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                  : 'border-zinc-300 dark:border-zinc-600 hover:border-blue-500 bg-white dark:bg-zinc-900'
+              }`}
+            >
+              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+            </div>
+          </button>
+        )}
+
         {/* Collapse / Expand Chevron */}
         <div className="w-5 h-6 flex items-center justify-center shrink-0">
           {hasChildren ? (
@@ -666,6 +731,8 @@ export const RemItem: React.FC<RemItemProps> = ({
               isLastSibling={idx === rem.childrenIds.length - 1}
               onOpenAiModal={onOpenAiModal}
               onOpenImportModal={onOpenImportModal}
+              isSelected={isSelected}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </div>

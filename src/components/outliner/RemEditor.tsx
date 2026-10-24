@@ -57,13 +57,43 @@ export const RemEditor: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importModalTab, setImportModalTab] = useState<'pdf' | 'web' | 'youtube'>('pdf');
 
-  // Keep title in sync when activeRem changes
+  // Multi-select state for bulk actions (select multiple Rems to delete or move)
+  const [selectedRemIds, setSelectedRemIds] = useState<Set<string>>(new Set());
+
+  // Keep title in sync and clear multi-selection when activeRem changes
   React.useEffect(() => {
+    setSelectedRemIds(new Set());
     if (activeRem) {
       setTitleText(activeRem.text);
       setFormattedDate(new Date(activeRem.updatedAt).toLocaleDateString());
     }
   }, [activeRem]);
+
+  // Bulk delete selected rems
+  const handleBulkDelete = async () => {
+    if (selectedRemIds.size === 0) return;
+    const count = selectedRemIds.size;
+    if (window.confirm(`Möchtest du die ${count} ausgewählten Notizen wirklich löschen?`)) {
+      for (const id of Array.from(selectedRemIds)) {
+        await deleteRem(id);
+      }
+      setSelectedRemIds(new Set());
+    }
+  };
+
+  // Keyboard shortcut listener for multi-select (Escape to clear, Delete/Backspace to delete)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedRemIds.size === 0) return;
+      if (e.key === 'Escape') {
+        setSelectedRemIds(new Set());
+      } else if (e.key === 'Delete' || (e.key === 'Backspace' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT')) {
+        handleBulkDelete();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedRemIds]);
 
   if (!activeRem) {
     return (
@@ -515,6 +545,15 @@ export const RemEditor: React.FC = () => {
                 remId={childId}
                 depth={0}
                 isLastSibling={idx === arr.length - 1}
+                isSelected={selectedRemIds.has(childId)}
+                onToggleSelect={(id) => {
+                  setSelectedRemIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                }}
                 onOpenAiModal={(mode, id) => {
                   setAiModalMode(mode);
                   setAiTargetRemId(id || activeRem.id);
@@ -540,6 +579,53 @@ export const RemEditor: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Floating Multi-Select Actions Bar */}
+      {selectedRemIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-zinc-900/95 dark:bg-zinc-800/95 text-white shadow-2xl rounded-2xl border border-zinc-700/80 px-4 py-2.5 flex items-center gap-3.5 animate-in fade-in slide-in-from-bottom-3 backdrop-blur-md">
+          <div className="text-xs font-semibold flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-bold">
+              {selectedRemIds.size}
+            </span>
+            <span>{selectedRemIds.size === 1 ? 'Rem selected' : 'Rems selected'}</span>
+          </div>
+
+          <div className="h-4 w-px bg-zinc-700" />
+
+          {/* Select All Children */}
+          <button
+            type="button"
+            onClick={() => {
+              const allChildIds = (activeRem.childrenIds || []).filter(
+                (cid) => !isFolder || childBullets.some((b) => b.id === cid)
+              );
+              setSelectedRemIds(new Set(allChildIds));
+            }}
+            className="text-xs text-zinc-300 hover:text-white font-medium transition-colors cursor-pointer"
+          >
+            Select All
+          </button>
+
+          {/* Delete Selected (Bulk Delete) */}
+          <button
+            type="button"
+            onClick={handleBulkDelete}
+            className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete Selected</span>
+          </button>
+
+          {/* Cancel */}
+          <button
+            type="button"
+            onClick={() => setSelectedRemIds(new Set())}
+            className="text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer ml-1"
+          >
+            Cancel (Esc)
+          </button>
+        </div>
+      )}
 
       {/* Backlinks & Bidirectional References Section */}
       <div className="mt-12 pt-8 border-t border-zinc-200 dark:border-zinc-800 space-y-6">
