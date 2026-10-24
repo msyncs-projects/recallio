@@ -118,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div>
               <div className="font-extrabold text-sm text-zinc-900 dark:text-white tracking-tight flex items-center gap-1.5">
-                <span>MnemoFlow</span>
+                <span>Recallio</span>
               </div>
               <div className="text-[10px] text-zinc-400 font-medium flex items-center gap-1">
                 <HardDrive className="w-2.5 h-2.5 text-emerald-500" />

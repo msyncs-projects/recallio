@@ -38,7 +38,7 @@ function MainApp() {
             <Sparkles className="w-6 h-6" />
           </div>
           <div className="text-sm font-semibold tracking-wide text-zinc-500 dark:text-zinc-400">
-            Initializing MnemoFlow Knowledge Base...
+            Initializing Recallio Knowledge Base...
           </div>
         </div>
       </div>
@@ -68,7 +68,7 @@ function MainApp() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="font-bold text-sm text-zinc-800 dark:text-zinc-200">
-            MnemoFlow
+            Recallio
           </div>
           <button
             type="button"

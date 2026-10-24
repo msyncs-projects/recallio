@@ -5,7 +5,7 @@ export async function POST() {
 
   // Clear HTTP-Only session cookie
   response.cookies.set({
-    name: 'mnemoflow_session',
+    name: 'recallio_session',
     value: '',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

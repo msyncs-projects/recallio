@@ -55,7 +55,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           setLoading(false);
           return;
         }
-        setSuccessMessage('Account created successfully! Welcome to MnemoFlow.');
+        setSuccessMessage('Account created successfully! Welcome to Recallio.');
       }
 
       // Sync cloud data

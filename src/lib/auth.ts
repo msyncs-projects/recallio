@@ -71,7 +71,7 @@ export async function getAuthenticatedUser(request?: NextRequest): Promise<JWTPa
   if (!token) {
     try {
       const cookieStore = await cookies();
-      token = cookieStore.get('mnemoflow_session')?.value;
+      token = cookieStore.get('recallio_session')?.value;
     } catch {
       // Cookies not accessible outside request context
     }

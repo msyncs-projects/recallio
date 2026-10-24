@@ -1,4 +1,4 @@
-# 🧠 MnemoFlow (`mnemoflow`)
+# 🧠 Recallio (`recallio`)
 
 An open-source, full-stack clone of **RemNote** combining a keyboard-driven hierarchical outliner with automatic spaced-repetition (SRS) flashcard generation, interactive 2D knowledge graphs, bidirectional backlinks, and **hybrid local-first + PostgreSQL cloud synchronization with multi-user authentication**.
 
@@ -103,12 +103,12 @@ The local PostgreSQL database is already running in Docker on port `5432`.
 In your Vercel Project Settings &rarr; **Environment Variables**, add:
 * `DATABASE_URL`: `postgres://...` (your PostgreSQL connection string)
 * `JWT_SECRET`: Any random 32+ character string (e.g. `your-production-jwt-secret-key-32chars`)
-* `NEXT_PUBLIC_APP_NAME`: `MnemoFlow`
+* `NEXT_PUBLIC_APP_NAME`: `Recallio`
 
 ### Step 3: Deploy
-Push this repository to GitHub/GitLab:
+Push this repository to GitHub:
 ```bash
-git remote add origin https://github.com/your-username/mnemoflow.git
+git remote add origin git@github.com:msyncs-projects/recallio.git
 git push -u origin main
 ```
 Import the repository into Vercel and click **Deploy**. Vercel will build the app and execute database migrations automatically.

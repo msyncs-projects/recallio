@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'MnemoFlow - Outliner & Spaced Repetition Knowledge Base',
+  title: 'Recallio - Outliner & Spaced Repetition Knowledge Base',
   description:
     'All-in-one outliner note-taking with automatic spaced repetition flashcards, 2D knowledge graph, and cloud-synced persistence.',
 };
