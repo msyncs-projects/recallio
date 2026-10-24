@@ -17,6 +17,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
+import { AiSettingsPanel } from '@/components/settings/AiSettingsPanel';
 
 interface AiAssistantModalProps {
   isOpen: boolean;
@@ -31,7 +32,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   targetRemId,
   initialMode = 'flashcards',
 }) => {
-  const { rems, activeRem, createRem, updateRemText } = useRem();
+  const { rems, activeRem, createRem, updateRemText, aiConfig } = useRem();
 
   const [activeTab, setActiveTab] = useState<'flashcards' | 'summary' | 'expand' | 'qa' | 'settings'>(initialMode);
   const [apiKey, setApiKey] = useState('');
@@ -94,11 +95,14 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
           documentTitle: docTitle,
           mode,
           prompt: mode === 'qa' ? qaQuestion : undefined,
-          userApiKey: apiKey.trim() || undefined,
+          config: aiConfig,
         }),
       });
 
-      if (!res.ok) throw new Error('AI generation failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'AI generation failed');
+      }
       const data = await res.json();
 
       if (mode === 'flashcards' && data.data?.cards) {
@@ -470,23 +474,8 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
 
           {/* TAB 5: SETTINGS */}
           {activeTab === 'settings' && (
-            <div className="space-y-4">
-              <div className="p-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 space-y-2">
-                <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Custom Google Gemini API Key (Optional)</span>
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  Recallio includes a fast built-in local NLP engine that works out of the box without any keys. If you wish to use Google&apos;s Gemini 1.5/2.0 LLM for advanced deep reasoning, you can provide your free Google Gemini API key below.
-                </p>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="AIzaSy..."
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white outline-none focus:border-blue-500"
-                />
-              </div>
+            <div className="py-1">
+              <AiSettingsPanel />
             </div>
           )}
 

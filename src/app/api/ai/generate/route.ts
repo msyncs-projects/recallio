@@ -1,14 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { AiProvider } from '@/types';
 
 interface AiGenerateRequest {
   text?: string;
   documentTitle?: string;
-  mode: 'flashcards' | 'summary' | 'expand' | 'explain' | 'qa';
+  mode: 'flashcards' | 'summary' | 'expand' | 'explain' | 'qa' | 'test';
   prompt?: string;
-  userApiKey?: string;
+  config?: {
+    provider?: AiProvider;
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+  };
 }
 
-// High-quality local NLP heuristics engine for instant zero-config flashcard & summary generation
+// Master System Prompt embedded on the backend so any LLM immediately understands Recallio & its role
+const RECALLIO_MASTER_SYSTEM_PROMPT = `You are Recallio's Core AI Knowledge & Flashcard Engine.
+Software Context:
+Recallio is an advanced hierarchical outliner and active-recall spaced-repetition (SM-2) learning system inspired by RemNote.
+Your Role:
+Transform notes, documents, and student prompts into structured, high-yield active-recall knowledge artifacts adhering strictly to Recallio's syntax.
+
+Recallio Syntax Rules:
+1. Concept Flashcard: "Concept :: Definition"
+   - Front is the prompt/cue, back is the concise explanation.
+2. Bidirectional Card: "Term ::: Equivalent/Translation"
+   - Tested in both directions during review.
+3. Cloze Deletion Card: "Sentence with {{hidden key term}} for fill-in-the-blank active recall."
+   - Wrap core vocabulary, formulas, numbers, or dates in double braces {{...}}.
+4. Document Links: "[[Document Title]]"
+5. Tags: "#tag"
+
+Output Rules:
+- Return ONLY valid JSON with no markdown backticks, no comments, and no conversational preamble.
+`;
+
+// Fast, zero-dependency local NLP heuristics engine for offline / zero-key usage
 function generateLocalHeuristicCards(text: string, title?: string): Array<{
   front: string;
   back: string;
@@ -27,7 +54,6 @@ function generateLocalHeuristicCards(text: string, title?: string): Array<{
     .map((s) => s.trim())
     .filter((s) => s.length > 15);
 
-  // Definition keywords
   const defPatterns = [
     /\b([A-Z][a-zA-Z0-9_\s]{2,30}?)\s+(?:is|are|refers to|means|defined as|represents)\s+(.+)/i,
     /\b([a-zA-Z0-9_\s]{2,30}?)\s*:\s*(.+)/,
@@ -37,7 +63,6 @@ function generateLocalHeuristicCards(text: string, title?: string): Array<{
   for (const sentence of sentences) {
     let matched = false;
 
-    // Check for concept / definition
     for (const pattern of defPatterns) {
       const match = sentence.match(pattern);
       if (match && match[1] && match[2] && match[2].length > 10) {
@@ -55,7 +80,6 @@ function generateLocalHeuristicCards(text: string, title?: string): Array<{
     }
 
     if (!matched && sentence.length > 25 && sentence.length < 220) {
-      // Find candidate key words for Cloze deletions (numbers, dates, quoted terms, capitalized technical words)
       const clozeMatch = sentence.match(
         /\b(\d{4}|\d+%(?:age)?|\b[A-Z][a-z]{3,}\b|\b(?:algorithm|database|memory|repetition|ontology|factor|interval|retention|schedule)\b)/
       );
@@ -72,7 +96,6 @@ function generateLocalHeuristicCards(text: string, title?: string): Array<{
     }
   }
 
-  // Fallback if notes were brief
   if (cards.length === 0 && text.trim().length > 0) {
     const mainTitle = title || 'Core Concept';
     cards.push({
@@ -89,25 +112,88 @@ function generateLocalHeuristicCards(text: string, title?: string): Array<{
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as AiGenerateRequest;
-    const { text = '', documentTitle = '', mode = 'flashcards', prompt = '', userApiKey } = body;
+    const { text = '', documentTitle = '', mode = 'flashcards', prompt = '', config } = body;
 
-    const apiKey = userApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    const provider: AiProvider = config?.provider || (process.env.GEMINI_API_KEY ? 'gemini' : 'builtin');
+    const apiKey = config?.apiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || '';
+    const model = config?.model || (provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash');
+    const baseUrl = config?.baseUrl || '';
 
-    // If Google Gemini API Key is provided, call Gemini
-    if (apiKey) {
+    // Quick connection test mode for Settings BYOK verification
+    if (mode === 'test') {
+      if (provider === 'builtin') {
+        return NextResponse.json({
+          success: true,
+          provider: 'builtin',
+          message: 'Connected to Recallio Built-in NLP Engine (Offline, Zero-Cost)',
+        });
+      }
+      if (!apiKey && provider !== 'custom') {
+        return NextResponse.json(
+          { error: `API Key for ${provider.toUpperCase()} is required.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Task-specific instructions
+    const modeInstructions: Record<string, string> = {
+      flashcards: `Task: Analyze the provided notes and extract high-yield active-recall flashcards.
+Output strictly as a JSON object:
+{
+  "cards": [
+    {
+      "front": "Question or Concept prompt",
+      "back": "Answer or Explanation",
+      "type": "concept" | "bidirectional" | "cloze",
+      "textFormat": "Concept :: Definition" or "Sentence with {{cloze}}"
+    }
+  ]
+}`,
+      summary: `Task: Create an executive summary and a list of key bullet points from the document.
+Output strictly as a JSON object:
+{
+  "summary": "Executive summary paragraph...",
+  "bullets": [
+    "Key concept 1",
+    "Key concept 2"
+  ]
+}`,
+      expand: `Task: Elaborate on this concept with concrete real-world examples, intuitive analogies, and a memory mnemonic.
+Output strictly as a JSON object:
+{
+  "expanded": "Detailed explanation...",
+  "bullets": [
+    "Example: ...",
+    "Analogy: ...",
+    "Mnemonic: ..."
+  ]
+}`,
+      explain: `Task: Explain this concept simply (ELI5) with an intuitive analogy.
+Output strictly as a JSON object:
+{
+  "explanation": "Simple explanation...",
+  "analogy": "Analogy...",
+  "mnemonic": "Memory trick..."
+}`,
+      qa: `Task: Answer the student's question about the notes accurately and concisely.
+Output strictly as a JSON object:
+{
+  "answer": "Clear explanation..."
+}`,
+      test: `Task: Confirm connection. Output strictly as JSON: { "status": "ok", "message": "Connection verified" }`,
+    };
+
+    const taskInstruction = modeInstructions[mode] || modeInstructions.flashcards;
+    const userPrompt = `Document Title: "${documentTitle}"\nContent:\n${text}\n\nUser Question/Note Context: ${prompt || mode}`;
+
+    // -------------------------------------------------------------------------
+    // 1. Google Gemini Provider
+    // -------------------------------------------------------------------------
+    if (provider === 'gemini' && apiKey) {
       try {
-        const systemPrompts: Record<string, string> = {
-          flashcards: `You are Recallio's AI Flashcard Engine. Analyze the notes and extract high-yield active-recall flashcards formatted strictly as JSON array of objects: [{ "front": "...", "back": "...", "type": "concept" | "bidirectional" | "cloze", "textFormat": "Front :: Back" }]. Use Recallio syntax: "Concept :: Definition", "Term ::: Equivalent", or "Sentence with {{cloze}} deletion". Return ONLY raw JSON without markdown code fences.`,
-          summary: `You are Recallio's AI Summary Engine. Create an executive summary and a list of key bullet points from the document. Return JSON: { "summary": "...", "bullets": ["...", "..."] }. Return ONLY raw JSON without markdown fences.`,
-          expand: `You are Recallio's AI Tutor. Elaborate on this concept with concrete real-world examples, analogies, and a memory mnemonic. Return JSON: { "expanded": "...", "bullets": ["Example 1", "Analogy", "Mnemonic"] }. Return ONLY raw JSON.`,
-          explain: `You are Recallio's AI Explainer. Explain this concept simply (ELI5) with an intuitive analogy. Return JSON: { "explanation": "...", "analogy": "...", "mnemonic": "..." }. Return ONLY raw JSON.`,
-          qa: `You are Recallio's AI Study Partner. Answer questions about the document concisely and accurately. Return JSON: { "answer": "..." }. Return ONLY raw JSON.`,
-        };
-
-        const userPrompt = `Document: "${documentTitle}"\nContent:\n${text}\n\nTask details / Question: ${prompt || mode}`;
-
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -115,7 +201,7 @@ export async function POST(req: NextRequest) {
               contents: [
                 {
                   parts: [
-                    { text: systemPrompts[mode] || systemPrompts.flashcards },
+                    { text: `${RECALLIO_MASTER_SYSTEM_PROMPT}\n\n${taskInstruction}` },
                     { text: userPrompt },
                   ],
                 },
@@ -133,19 +219,117 @@ export async function POST(req: NextRequest) {
           const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
           const cleanedJson = rawText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
           const parsed = JSON.parse(cleanedJson);
-          return NextResponse.json({ success: true, provider: 'gemini', data: parsed });
+          return NextResponse.json({ success: true, provider: 'gemini', model, data: parsed });
+        } else {
+          const errData = await geminiRes.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Gemini API returned ${geminiRes.status}`);
         }
-      } catch (geminiErr) {
+      } catch (geminiErr: any) {
+        if (mode === 'test') {
+          return NextResponse.json({ error: geminiErr.message }, { status: 400 });
+        }
         console.warn('Gemini API call failed, falling back to local NLP heuristics:', geminiErr);
       }
     }
 
-    // Built-in intelligent NLP heuristic responses (always available, offline/zero-cost)
+    // -------------------------------------------------------------------------
+    // 2. OpenAI / OpenAI-Compatible (Groq, OpenRouter, Ollama, Local)
+    // -------------------------------------------------------------------------
+    if ((provider === 'openai' || provider === 'custom') && (apiKey || baseUrl)) {
+      try {
+        const apiEndpoint = baseUrl ? `${baseUrl.replace(/\/+$/, '')}/chat/completions` : 'https://api.openai.com/v1/chat/completions';
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+
+        const openAiRes = await fetch(apiEndpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: model || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: `${RECALLIO_MASTER_SYSTEM_PROMPT}\n\n${taskInstruction}` },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.2,
+            response_format: { type: 'json_object' },
+          }),
+        });
+
+        if (openAiRes.ok) {
+          const data = await openAiRes.json();
+          const rawContent = data.choices?.[0]?.message?.content || '{}';
+          const parsed = JSON.parse(rawContent);
+          return NextResponse.json({ success: true, provider, model, data: parsed });
+        } else {
+          const errData = await openAiRes.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `OpenAI API returned ${openAiRes.status}`);
+        }
+      } catch (openAiErr: any) {
+        if (mode === 'test') {
+          return NextResponse.json({ error: openAiErr.message }, { status: 400 });
+        }
+        console.warn('OpenAI/Custom API call failed, falling back to local heuristics:', openAiErr);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Anthropic Claude Provider
+    // -------------------------------------------------------------------------
+    if (provider === 'anthropic' && apiKey) {
+      try {
+        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: model || 'claude-3-5-sonnet-20241022',
+            max_tokens: 1500,
+            system: `${RECALLIO_MASTER_SYSTEM_PROMPT}\n\n${taskInstruction}`,
+            messages: [{ role: 'user', content: userPrompt }],
+          }),
+        });
+
+        if (claudeRes.ok) {
+          const data = await claudeRes.json();
+          const rawContent = data.content?.[0]?.text || '{}';
+          const cleanedJson = rawContent.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+          const parsed = JSON.parse(cleanedJson);
+          return NextResponse.json({ success: true, provider: 'anthropic', model, data: parsed });
+        } else {
+          const errData = await claudeRes.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Anthropic API returned ${claudeRes.status}`);
+        }
+      } catch (claudeErr: any) {
+        if (mode === 'test') {
+          return NextResponse.json({ error: claudeErr.message }, { status: 400 });
+        }
+        console.warn('Anthropic API call failed, falling back to local heuristics:', claudeErr);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. Built-in Local NLP Heuristics Fallback (Zero-Cost & Offline)
+    // -------------------------------------------------------------------------
+    if (mode === 'test') {
+      return NextResponse.json({
+        success: true,
+        provider: 'builtin',
+        message: 'Connected to Recallio Built-in NLP Engine',
+      });
+    }
+
     if (mode === 'flashcards') {
       const cards = generateLocalHeuristicCards(text, documentTitle);
       return NextResponse.json({
         success: true,
-        provider: 'local-nlp',
+        provider: 'builtin',
         data: { cards },
       });
     }
@@ -161,10 +345,10 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        provider: 'local-nlp',
+        provider: 'builtin',
         data: {
           summary,
-          bullets: bullets.length > 0 ? bullets : ['Key point from note: ' + text.slice(0, 60)],
+          bullets: bullets.length > 0 ? bullets : ['Key point: ' + text.slice(0, 60)],
         },
       });
     }
@@ -173,7 +357,7 @@ export async function POST(req: NextRequest) {
       const topic = documentTitle || text.split('::')[0].trim() || 'This concept';
       return NextResponse.json({
         success: true,
-        provider: 'local-nlp',
+        provider: 'builtin',
         data: {
           expanded: `Detailed breakdown of ${topic}: In active recall and outliner hierarchies, this forms a core anchor.`,
           bullets: [
@@ -189,7 +373,7 @@ export async function POST(req: NextRequest) {
       const topic = documentTitle || text.split('::')[0].trim() || 'Concept';
       return NextResponse.json({
         success: true,
-        provider: 'local-nlp',
+        provider: 'builtin',
         data: {
           explanation: `${topic} is fundamentally structured to optimize retention and understanding when reviewed spaced over time.`,
           analogy: `Like building muscle through progressive overload, reviewing ${topic} at calibrated intervals solidifies long-term neural connections.`,
@@ -198,12 +382,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Default QA answer
+    // Default QA
     return NextResponse.json({
       success: true,
-      provider: 'local-nlp',
+      provider: 'builtin',
       data: {
-        answer: `Based on your notes in "${documentTitle || 'Recallio'}", here is the explanation:\n\n${text.slice(0, 300)}...`,
+        answer: `Based on your notes in "${documentTitle || 'Recallio'}":\n\n${text.slice(0, 300)}...`,
       },
     });
   } catch (err: unknown) {

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
-import { Rem, Card, RemType, SRSGrade, BreadcrumbItem, SearchResult, StudyStats } from '@/types';
+import { Rem, Card, RemType, SRSGrade, BreadcrumbItem, SearchResult, StudyStats, AiConfig } from '@/types';
 import { db, initializeDatabase, resetDatabase, exportDatabaseToJSON, importDatabaseFromJSON } from '@/lib/db';
 import { syncCardsForRem, extractReferences, extractTags } from '@/lib/cardParser';
 import { calculateNextSRSState } from '@/lib/srs';
@@ -73,6 +73,10 @@ interface RemContextType {
   resetToDefaults: () => Promise<void>;
   exportBackup: () => Promise<string>;
   importBackup: (json: string) => Promise<boolean>;
+
+  // AI Configuration (BYOK)
+  aiConfig: AiConfig;
+  saveAiConfig: (config: Partial<AiConfig>) => Promise<void>;
 }
 
 const RemContext = createContext<RemContextType | null>(null);
@@ -94,6 +98,12 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
     totalCards: 0,
     dueCardsCount: 0,
     retentionRate: 94,
+  });
+  const [aiConfig, setAiConfig] = useState<AiConfig>({
+    provider: 'gemini',
+    model: 'gemini-1.5-flash',
+    apiKey: '',
+    baseUrl: '',
   });
 
   // Pull cloud notes and update local DB
@@ -262,10 +272,25 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
           retentionRate: 90,
         });
       }
+
+      // Load persistent user AI config (BYOK)
+      const storedAiConfig = await db.settings.get('ai_config');
+      if (storedAiConfig && storedAiConfig.value) {
+        setAiConfig(storedAiConfig.value as AiConfig);
+      }
+
       setIsInitialized(true);
     } catch (err) {
       console.error('Error initializing RemNote DB:', err);
     }
+  }, []);
+
+  const saveAiConfig = useCallback(async (partial: Partial<AiConfig>) => {
+    setAiConfig((prev) => {
+      const updated = { ...prev, ...partial };
+      db.settings.put({ key: 'ai_config', value: updated });
+      return updated;
+    });
   }, []);
 
   useEffect(() => {
@@ -942,6 +967,8 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
         resetToDefaults,
         exportBackup,
         importBackup,
+        aiConfig,
+        saveAiConfig,
       }}
     >
       {children}

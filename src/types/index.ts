@@ -20,6 +20,15 @@ export interface Rem {
   updatedAt: number;
 }
 
+export type AiProvider = 'gemini' | 'openai' | 'anthropic' | 'custom' | 'builtin';
+
+export interface AiConfig {
+  provider: AiProvider;
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+}
+
 export type CardType = 'concept_descriptor' | 'bidirectional' | 'cloze' | 'list';
 export type CardState = 'new' | 'learning' | 'review' | 'relearning';
 export type SRSGrade = 1 | 2 | 3 | 4; // 1: Again, 2: Hard, 3: Good, 4: Easy

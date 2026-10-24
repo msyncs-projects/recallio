@@ -700,10 +700,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="button"
               onClick={onOpenImportExport}
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
-              title="Backup and Restore Data"
+              title="Settings, AI Models & Data Backup"
             >
               <Settings className="w-3.5 h-3.5" />
-              <span>Data & Backup</span>
+              <span>Einstellungen & KI</span>
             </button>
 
             <button
