@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   CreditCard, 
@@ -22,9 +22,12 @@ import {
   LogOut,
   RefreshCw,
   User as UserIcon,
-  LogIn
+  LogIn,
+  Folder,
+  FolderOpen
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
+import { Rem } from '@/types';
 
 interface SidebarProps {
   onOpenSearch: () => void;
@@ -58,8 +61,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   } = useRem();
 
   const [expandedDocIds, setExpandedDocIds] = useState<Set<string>>(new Set(['doc-rea', 'doc-welcome']));
+  // Dropdown menu state: 'header' | 'docs' | 'folder-[id]' | null
+  const [openMenuTarget, setOpenMenuTarget] = useState<string | null>(null);
 
-  // Root documents
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.create-dropdown-container')) {
+        setOpenMenuTarget(null);
+      }
+    };
+    if (openMenuTarget) {
+      window.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [openMenuTarget]);
+
+  // Root documents and folders
   const rootDocuments = rems.filter((r) => r.parentId === null);
   const pinnedDocuments = rems.filter((r) => r.isPinned);
 
@@ -76,9 +94,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
-  const handleCreateNewDoc = async () => {
-    const newId = await createRem(null, undefined, 'Untitled Note', 'document');
+  const handleCreateItem = async (type: 'document' | 'folder', parentId: string | null = null) => {
+    setOpenMenuTarget(null);
+    const defaultTitle = type === 'folder' ? 'New Folder' : 'Untitled Note';
+    const newId = await createRem(parentId, undefined, defaultTitle, type);
+    if (parentId) {
+      setExpandedDocIds((prev) => new Set(prev).add(parentId));
+    }
     zoomIntoRem(newId);
+    setActiveView('editor');
     if (isOpenMobile) onCloseMobile();
   };
 
@@ -93,6 +117,142 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
     setActiveView('editor');
     if (isOpenMobile) onCloseMobile();
+  };
+
+  // Reusable Dropdown for creating Document vs Folder
+  const CreateDropdown: React.FC<{
+    parentId?: string | null;
+    align?: 'left' | 'right';
+  }> = ({ parentId = null, align = 'right' }) => (
+    <div
+      className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-1.5 w-48 bg-white dark:bg-zinc-850 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700/80 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-2.5 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+        {parentId ? 'Add to Folder' : 'Create New'}
+      </div>
+      <button
+        type="button"
+        onClick={() => handleCreateItem('document', parentId)}
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left text-zinc-700 dark:text-zinc-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer group"
+      >
+        <div className="w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+          <FileText className="w-3.5 h-3.5" />
+        </div>
+        <div>
+          <div className="font-semibold leading-tight">New Document</div>
+          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">Outliner note & cards</div>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => handleCreateItem('folder', parentId)}
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left text-zinc-700 dark:text-zinc-200 hover:bg-amber-50 dark:hover:bg-amber-950/50 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer group"
+      >
+        <div className="w-6 h-6 rounded-md bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+          <Folder className="w-3.5 h-3.5" />
+        </div>
+        <div>
+          <div className="font-semibold leading-tight">New Folder</div>
+          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">Organize documents</div>
+        </div>
+      </button>
+    </div>
+  );
+
+  // Recursive Tree Item Renderer for Documents & Folders
+  const renderTreeItem = (doc: Rem, depth = 0): React.ReactNode => {
+    const isFolder = doc.type === 'folder';
+    const isExpanded = expandedDocIds.has(doc.id);
+    const childRems = doc.childrenIds
+      ? (doc.childrenIds.map((cid) => rems.find((r) => r.id === cid)).filter(Boolean) as Rem[])
+      : [];
+    const hasChildren = childRems.length > 0;
+    const isCurrent = activeRemId === doc.id && activeView === 'editor';
+    const menuKey = `folder-${doc.id}`;
+
+    return (
+      <div key={doc.id} className="space-y-0.5">
+        <div
+          onClick={() => {
+            zoomIntoRem(doc.id);
+            setActiveView('editor');
+            if (isOpenMobile) onCloseMobile();
+          }}
+          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs truncate flex items-center justify-between group transition-colors cursor-pointer ${
+            isCurrent
+              ? isFolder
+                ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 font-semibold'
+                : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-semibold'
+              : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+          }`}
+          style={{ paddingLeft: `${Math.max(8, depth * 14 + 8)}px` }}
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            {/* Expand / Collapse Chevron */}
+            {hasChildren || isFolder ? (
+              <button
+                type="button"
+                onClick={(e) => toggleDocExpand(doc.id, e)}
+                className="p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-400 cursor-pointer"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+              </button>
+            ) : (
+              <div className="w-3 h-3" />
+            )}
+
+            {/* Icon */}
+            {isFolder ? (
+              isExpanded ? (
+                <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              ) : (
+                <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              )
+            ) : (
+              <FileText className="w-3.5 h-3.5 text-zinc-400 group-hover:text-blue-500 shrink-0" />
+            )}
+
+            {/* Title */}
+            <span className="truncate">
+              {doc.text.split('::')[0].trim() || (isFolder ? 'Untitled Folder' : 'Untitled Note')}
+            </span>
+          </div>
+
+          {/* Action buttons on hover */}
+          {isFolder && (
+            <div className="relative create-dropdown-container">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenuTarget(openMenuTarget === menuKey ? null : menuKey);
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-amber-600 rounded transition-all cursor-pointer"
+                title="Add Document or Folder inside"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+              {openMenuTarget === menuKey && (
+                <CreateDropdown parentId={doc.id} />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Children indented */}
+        {isExpanded && hasChildren && (
+          <div className="space-y-0.5 border-l border-zinc-200 dark:border-zinc-800/80 ml-3">
+            {childRems.map((child) => renderTreeItem(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -127,14 +287,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleCreateNewDoc}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="Create New Document"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          <div className="relative create-dropdown-container">
+            <button
+              type="button"
+              onClick={() => setOpenMenuTarget(openMenuTarget === 'header' ? null : 'header')}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                openMenuTarget === 'header'
+                  ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400'
+                  : 'text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title="Create Document or Folder"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {openMenuTarget === 'header' && (
+              <CreateDropdown align="right" />
+            )}
+          </div>
         </div>
 
         {/* Global Search Shortcut Button */}
@@ -256,95 +425,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                    <span className="truncate">{doc.text.split('::')[0].trim() || 'Untitled'}</span>
+                    {doc.type === 'folder' ? (
+                      <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    ) : (
+                      <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    )}
+                    <span className="truncate">{doc.text.split('::')[0].trim() || (doc.type === 'folder' ? 'Untitled Folder' : 'Untitled Note')}</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Documents Tree Hierarchy */}
+          {/* Documents & Folders Tree Hierarchy */}
           <div className="space-y-1 pt-3">
             <div className="px-2 py-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Documents ({rootDocuments.length})</span>
-              <button
-                type="button"
-                onClick={handleCreateNewDoc}
-                className="hover:text-blue-500 transition-colors"
-                title="Add Document"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
+              <span>Documents & Folders ({rootDocuments.length})</span>
+              <div className="relative create-dropdown-container">
+                <button
+                  type="button"
+                  onClick={() => setOpenMenuTarget(openMenuTarget === 'docs' ? null : 'docs')}
+                  className={`p-1 rounded hover:text-blue-500 transition-colors cursor-pointer ${
+                    openMenuTarget === 'docs' ? 'text-blue-500 bg-zinc-100 dark:bg-zinc-800' : ''
+                  }`}
+                  title="Create Document or Folder"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                {openMenuTarget === 'docs' && (
+                  <CreateDropdown align="right" />
+                )}
+              </div>
             </div>
             <div className="space-y-0.5">
-              {rootDocuments.map((doc) => {
-                const isExpanded = expandedDocIds.has(doc.id);
-                const hasChildren = doc.childrenIds && doc.childrenIds.length > 0;
-                const isCurrent = activeRemId === doc.id && activeView === 'editor';
-
-                return (
-                  <div key={doc.id} className="space-y-0.5">
-                    <div
-                      onClick={() => {
-                        zoomIntoRem(doc.id);
-                        setActiveView('editor');
-                        if (isOpenMobile) onCloseMobile();
-                      }}
-                      className={`w-full text-left px-2 py-1.5 rounded-lg text-xs truncate flex items-center justify-between group transition-colors cursor-pointer ${
-                        isCurrent
-                          ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-semibold'
-                          : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {hasChildren ? (
-                          <button
-                            type="button"
-                            onClick={(e) => toggleDocExpand(doc.id, e)}
-                            className="p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-400"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="w-3 h-3" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3" />
-                            )}
-                          </button>
-                        ) : (
-                          <div className="w-3 h-3" />
-                        )}
-                        <span className="truncate">
-                          {doc.text.split('::')[0].trim() || 'Untitled'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Sub-children previews when expanded */}
-                    {isExpanded && hasChildren && (
-                      <div className="pl-6 space-y-0.5 border-l border-zinc-200 dark:border-zinc-800 ml-3">
-                        {doc.childrenIds.slice(0, 5).map((childId) => {
-                          const childRem = rems.find((r) => r.id === childId);
-                          if (!childRem) return null;
-                          return (
-                            <button
-                              key={childId}
-                              type="button"
-                              onClick={() => {
-                                zoomIntoRem(childId);
-                                setActiveView('editor');
-                                if (isOpenMobile) onCloseMobile();
-                              }}
-                              className="w-full text-left px-2 py-1 text-[11px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white truncate block rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-                            >
-                              • {childRem.text.split('::')[0].trim() || 'Untitled'}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {rootDocuments.length > 0 ? (
+                rootDocuments.map((doc) => renderTreeItem(doc, 0))
+              ) : (
+                <div className="p-4 text-center text-xs text-zinc-400 italic">
+                  No documents yet. Click + to create one!
+                </div>
+              )}
             </div>
           </div>
 

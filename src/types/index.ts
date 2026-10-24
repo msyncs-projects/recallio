@@ -1,4 +1,4 @@
-export type RemType = 'document' | 'concept' | 'descriptor' | 'bullet' | 'header1' | 'header2' | 'header3';
+export type RemType = 'document' | 'folder' | 'concept' | 'descriptor' | 'bullet' | 'header1' | 'header2' | 'header3';
 
 export interface Rem {
   id: string;

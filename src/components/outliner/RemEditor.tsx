@@ -11,9 +11,13 @@ import {
   BookOpen, 
   FolderTree, 
   Share2,
-  Calendar
+  Calendar,
+  Folder,
+  FolderOpen,
+  FileText
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
+import { Rem } from '@/types';
 import { RemItem } from './RemItem';
 
 export const RemEditor: React.FC = () => {
@@ -79,6 +83,13 @@ export const RemEditor: React.FC = () => {
 
   const { linked, unlinked } = getBacklinksForRem(activeRem.id);
 
+  const isFolder = activeRem.type === 'folder';
+  const childRems = (activeRem.childrenIds || [])
+    .map((id) => rems.find((r) => r.id === id))
+    .filter(Boolean) as Rem[];
+  const childDocsAndFolders = childRems.filter((r) => r.type === 'document' || r.type === 'folder');
+  const childBullets = childRems.filter((r) => r.type !== 'document' && r.type !== 'folder');
+
   const handleTitleBlur = () => {
     setIsEditingTitle(false);
     if (titleText !== activeRem.text) {
@@ -91,7 +102,7 @@ export const RemEditor: React.FC = () => {
       e.currentTarget.blur();
       // Create first child if empty
       if (activeRem.childrenIds.length === 0) {
-        createRem(activeRem.id, undefined, '', 'bullet');
+        createRem(activeRem.id, undefined, '', isFolder ? 'document' : 'bullet');
       }
     }
   };
@@ -126,38 +137,69 @@ export const RemEditor: React.FC = () => {
         })}
       </nav>
 
-      {/* Document Header */}
+      {/* Document / Folder Header */}
       <div className="mb-8 space-y-4">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            {isEditingTitle ? (
-              <input
-                type="text"
-                value={titleText}
-                onChange={(e) => setTitleText(e.target.value)}
-                onBlur={handleTitleBlur}
-                onKeyDown={handleTitleKeyDown}
-                autoFocus
-                className="w-full text-2xl md:text-3xl font-extrabold text-zinc-900 dark:text-white bg-transparent border-b-2 border-blue-500 outline-none pb-1"
-              />
-            ) : (
-              <h1
-                onClick={() => setIsEditingTitle(true)}
-                className="text-2xl md:text-3xl font-extrabold text-zinc-900 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors leading-tight"
-                title="Click to edit document title"
-              >
-                {activeRem.text || 'Untitled Document'}
-              </h1>
+          <div className="flex-1 flex items-start gap-3">
+            {isFolder && (
+              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                <Folder className="w-6 h-6" />
+              </div>
             )}
+            <div className="flex-1">
+              {isEditingTitle ? (
+                <input
+                  type="text"
+                  value={titleText}
+                  onChange={(e) => setTitleText(e.target.value)}
+                  onBlur={handleTitleBlur}
+                  onKeyDown={handleTitleKeyDown}
+                  autoFocus
+                  className="w-full text-2xl md:text-3xl font-extrabold text-zinc-900 dark:text-white bg-transparent border-b-2 border-blue-500 outline-none pb-1"
+                />
+              ) : (
+                <h1
+                  onClick={() => setIsEditingTitle(true)}
+                  className="text-2xl md:text-3xl font-extrabold text-zinc-900 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors leading-tight"
+                  title="Click to edit title"
+                >
+                  {activeRem.text || (isFolder ? 'Untitled Folder' : 'Untitled Document')}
+                </h1>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Folder Actions */}
+            {isFolder && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => createRem(activeRem.id, undefined, 'Untitled Note', 'document')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+                  title="Create a new document inside this folder"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">New Document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => createRem(activeRem.id, undefined, 'New Folder', 'folder')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+                  title="Create a new subfolder inside this folder"
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">New Subfolder</span>
+                </button>
+              </>
+            )}
+
             {/* Study Deck Button */}
             {documentCards.length > 0 && (
               <button
                 type="button"
                 onClick={handleStudyDocument}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
                 title="Practice flashcards from this document"
               >
                 <CreditCard className="w-3.5 h-3.5" />
@@ -165,7 +207,7 @@ export const RemEditor: React.FC = () => {
               </button>
             )}
 
-            {/* Pin Document */}
+            {/* Pin Item */}
             <button
               type="button"
               onClick={() => togglePin(activeRem.id)}
@@ -183,6 +225,15 @@ export const RemEditor: React.FC = () => {
 
         {/* Metadata Badges & Tags */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+          <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border flex items-center gap-1 ${
+            isFolder
+              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+              : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/50'
+          }`}>
+            {isFolder ? <Folder className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
+            <span className="capitalize">{activeRem.type}</span>
+          </span>
+
           <div className="flex items-center gap-1.5">
             <CreditCard className="w-3.5 h-3.5 text-blue-500" />
             <span>{documentCards.length} {documentCards.length === 1 ? 'card' : 'cards'} in deck</span>
@@ -208,33 +259,103 @@ export const RemEditor: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Hierarchical Outliner Tree */}
-      <div className="space-y-1 pb-16">
-        {activeRem.childrenIds && activeRem.childrenIds.length > 0 ? (
-          activeRem.childrenIds.map((childId, idx) => (
-            <RemItem
-              key={childId}
-              remId={childId}
-              depth={0}
-              isLastSibling={idx === activeRem.childrenIds.length - 1}
-            />
-          ))
-        ) : (
-          <div className="py-8 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2">
-            <p className="text-xs text-zinc-400">This document has no bullet points yet.</p>
-            <button
-              type="button"
-              onClick={() => createRem(activeRem.id, undefined, '', 'bullet')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add First Rem
-            </button>
+      {/* If Folder: Display Contained Documents & Subfolders Grid */}
+      {isFolder && (
+        <div className="mb-10 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+              Contents ({childDocsAndFolders.length})
+            </h2>
           </div>
-        )}
 
-        {/* Add New Line Button */}
-        <div className="pt-3">
+          {childDocsAndFolders.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {childDocsAndFolders.map((child) => {
+                const isChildFolder = child.type === 'folder';
+                const childCardsCount = cards.filter((c) => c.remId === child.id).length;
+                return (
+                  <div
+                    key={child.id}
+                    onClick={() => zoomIntoRem(child.id)}
+                    className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-lg shrink-0 ${
+                        isChildFolder
+                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+                          : 'bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400'
+                      }`}>
+                        {isChildFolder ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-xs text-zinc-900 dark:text-white truncate group-hover:text-blue-500 transition-colors">
+                          {child.text.split('::')[0].trim() || (isChildFolder ? 'Untitled Folder' : 'Untitled Note')}
+                        </div>
+                        <div className="text-[11px] text-zinc-400 capitalize">
+                          {child.type}
+                        </div>
+                      </div>
+                    </div>
+
+                    {childCardsCount > 0 && (
+                      <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400 flex items-center gap-1">
+                        <CreditCard className="w-3 h-3 text-emerald-500" />
+                        <span>{childCardsCount} cards</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="py-8 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
+              <Folder className="w-8 h-8 mx-auto text-amber-400/60" />
+              <p className="text-xs text-zinc-400">This folder is currently empty.</p>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => createRem(activeRem.id, undefined, 'Untitled Note', 'document')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Create Document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => createRem(activeRem.id, undefined, 'New Folder', 'folder')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors cursor-pointer"
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  <span>Create Subfolder</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Hierarchical Outliner Tree (Notes / Bullets) */}
+      <div className="space-y-1 pb-16">
+        {isFolder && (
+          <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+            Notes & Outline
+          </h2>
+        )}
+        {activeRem.childrenIds && activeRem.childrenIds.length > 0 ? (
+          activeRem.childrenIds
+            .filter((childId) => !isFolder || childBullets.some((b) => b.id === childId))
+            .map((childId, idx, arr) => (
+              <RemItem
+                key={childId}
+                remId={childId}
+                depth={0}
+                isLastSibling={idx === arr.length - 1}
+              />
+            ))
+        ) : null}
+
+        {/* Add New Line / Bullet */}
+        <div className="pt-2">
           <button
             type="button"
             onClick={() => createRem(activeRem.id, undefined, '', 'bullet')}

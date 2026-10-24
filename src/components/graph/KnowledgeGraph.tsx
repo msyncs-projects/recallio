@@ -9,7 +9,8 @@ import {
   Tag, 
   ArrowLeft, 
   BookOpen, 
-  Layers 
+  Layers,
+  Folder
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { GraphNode, GraphLink } from '@/types';
@@ -23,28 +24,44 @@ export const KnowledgeGraph: React.FC = () => {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
 
+  // Persistent node positions & velocities across renders (prevents resetting and flickering)
+  const nodePhysicsRef = useRef<Map<string, { x: number; y: number; vx: number; vy: number }>>(
+    new Map()
+  );
+  const hoveredNodeIdRef = useRef<string | null>(null);
+  const cameraRef = useRef({ x: 0, y: 0, zoom: 1 });
+
   // Transform Rems into Graph Nodes and Links
   const { nodes, links, allTags } = useMemo(() => {
     const nodeMap = new Map<string, GraphNode>();
     const linkList: GraphLink[] = [];
     const tagsSet = new Set<string>();
 
-    rems.forEach((r) => {
+    rems.forEach((r, idx) => {
       const isDocument = r.parentId === null;
+      const isFolder = r.type === 'folder';
       const cardCount = cards.filter((c) => c.remId === r.id).length;
       r.tags?.forEach((t) => tagsSet.add(t));
 
       // Clean display label
       let label = r.text.split('::')[0].trim();
-      if (!label) label = 'Untitled';
-      if (label.length > 32) label = label.slice(0, 30) + '...';
+      if (!label) label = isFolder ? 'Untitled Folder' : 'Untitled Note';
+      if (label.length > 28) label = label.slice(0, 26) + '...';
 
-      // Deterministic initial placement using hash of r.id (prerender-safe)
-      const hash = r.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const angle = (hash % 360) * (Math.PI / 180);
-      const dist = 40 + (hash % 220);
-      const initX = Math.cos(angle) * dist;
-      const initY = Math.sin(angle) * dist;
+      // Check if node already has a stable position in physics ref
+      let physics = nodePhysicsRef.current.get(r.id);
+      if (!physics) {
+        // Deterministic initial placement spread out in a circle
+        const angle = (idx / Math.max(1, rems.length)) * Math.PI * 2;
+        const dist = 70 + (idx % 4) * 55;
+        physics = {
+          x: Math.cos(angle) * dist,
+          y: Math.sin(angle) * dist,
+          vx: 0,
+          vy: 0,
+        };
+        nodePhysicsRef.current.set(r.id, physics);
+      }
 
       nodeMap.set(r.id, {
         id: r.id,
@@ -52,11 +69,11 @@ export const KnowledgeGraph: React.FC = () => {
         type: r.type,
         cardCount,
         isCurrent: r.id === activeRemId,
-        x: initX,
-        y: initY,
-        vx: 0,
-        vy: 0,
-        radius: isDocument ? 16 : cardCount > 0 ? 11 : 7,
+        x: physics.x,
+        y: physics.y,
+        vx: physics.vx,
+        vy: physics.vy,
+        radius: isFolder ? 18 : isDocument ? 15 : cardCount > 0 ? 10 : 7,
       });
     });
 
@@ -94,7 +111,7 @@ export const KnowledgeGraph: React.FC = () => {
     };
   }, [rems, cards, activeRemId]);
 
-  // Simulation and Rendering Engine
+  // Simulation and Canvas Rendering Engine
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -102,17 +119,24 @@ export const KnowledgeGraph: React.FC = () => {
     if (!ctx) return;
 
     let animationFrameId: number;
-    let cameraX = 0;
-    let cameraY = 0;
-    let zoom = 1;
+    let cameraX = cameraRef.current.x;
+    let cameraY = cameraRef.current.y;
+    let zoom = cameraRef.current.zoom;
     let isDragging = false;
     let dragStartX = 0;
     let dragStartY = 0;
     let draggedNode: GraphNode | null = null;
 
     const resize = () => {
-      canvas.width = canvas.parentElement?.clientWidth || window.innerWidth;
-      canvas.height = canvas.parentElement?.clientHeight || window.innerHeight;
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvas.parentElement?.clientWidth || window.innerWidth;
+      const height = canvas.parentElement?.clientHeight || window.innerHeight;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.resetTransform?.();
+      ctx.scale(dpr, dpr);
     };
     resize();
     window.addEventListener('resize', resize);
@@ -132,28 +156,32 @@ export const KnowledgeGraph: React.FC = () => {
         .map((n) => n.id)
     );
 
-    // Simple Force-Directed Graph Simulation loop
+    // Stable, smooth force simulation (no vibration or jitter)
     const simulate = () => {
-      // Repulsion between nodes
+      // 1. Repulsion between all nodes (smooth inverse-square with distance damping)
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const a = nodes[i];
           const b = nodes[j];
           const dx = (b.x || 0) - (a.x || 0);
           const dy = (b.y || 0) - (a.y || 0);
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const distSq = dx * dx + dy * dy || 1;
+          const dist = Math.sqrt(distSq);
 
-          if (dist < 250) {
-            const force = (250 - dist) / dist * 0.05;
-            a.vx = (a.vx || 0) - dx * force;
-            a.vy = (a.vy || 0) - dy * force;
-            b.vx = (b.vx || 0) + dx * force;
-            b.vy = (b.vy || 0) + dy * force;
+          if (dist < 280) {
+            // Soft-capped force curve prevents explosion
+            const force = Math.min(2.5, 900 / (distSq + 300));
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            a.vx = (a.vx || 0) - fx;
+            a.vy = (a.vy || 0) - fy;
+            b.vx = (b.vx || 0) + fx;
+            b.vy = (b.vy || 0) + fy;
           }
         }
       }
 
-      // Link attraction
+      // 2. Link attraction springs
       links.forEach((link) => {
         const sourceNode = nodes.find((n) => n.id === link.source);
         const targetNode = nodes.find((n) => n.id === link.target);
@@ -161,36 +189,64 @@ export const KnowledgeGraph: React.FC = () => {
           const dx = (targetNode.x || 0) - (sourceNode.x || 0);
           const dy = (targetNode.y || 0) - (sourceNode.y || 0);
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const targetDist = link.type === 'reference' ? 120 : 60;
-          const force = (dist - targetDist) * 0.005;
+          const targetDist = link.type === 'reference' ? 110 : 65;
+          const spring = Math.max(-2, Math.min(2, (dist - targetDist) * 0.015));
+          const fx = (dx / dist) * spring;
+          const fy = (dy / dist) * spring;
 
-          sourceNode.vx = (sourceNode.vx || 0) + dx * force;
-          sourceNode.vy = (sourceNode.vy || 0) + dy * force;
-          targetNode.vx = (targetNode.vx || 0) - dx * force;
-          targetNode.vy = (targetNode.vy || 0) - dy * force;
+          sourceNode.vx = (sourceNode.vx || 0) + fx;
+          sourceNode.vy = (sourceNode.vy || 0) + fy;
+          targetNode.vx = (targetNode.vx || 0) - fx;
+          targetNode.vy = (targetNode.vy || 0) - fy;
         }
       });
 
-      // Gravity to center & damping
+      // 3. Central gravity, velocity clamping & high damping (prevents oscillations)
       nodes.forEach((n) => {
         if (n !== draggedNode) {
-          n.vx = (n.vx || 0) * 0.88 - (n.x || 0) * 0.002;
-          n.vy = (n.vy || 0) * 0.88 - (n.y || 0) * 0.002;
-          n.x = (n.x || 0) + (n.vx || 0);
-          n.y = (n.y || 0) + (n.vy || 0);
+          // Central attraction
+          n.vx = ((n.vx || 0) * 0.82) - (n.x || 0) * 0.0015;
+          n.vy = ((n.vy || 0) * 0.82) - (n.y || 0) * 0.0015;
+
+          // Velocity deadzone to eliminate vibration/shaking
+          if (Math.abs(n.vx) < 0.015) n.vx = 0;
+          if (Math.abs(n.vy) < 0.015) n.vy = 0;
+
+          // Clamp max speed
+          const speed = Math.hypot(n.vx, n.vy);
+          if (speed > 5) {
+            n.vx = (n.vx / speed) * 5;
+            n.vy = (n.vy / speed) * 5;
+          }
+
+          n.x = (n.x || 0) + n.vx;
+          n.y = (n.y || 0) + n.vy;
+
+          // Sync back to persistent physics ref
+          const saved = nodePhysicsRef.current.get(n.id);
+          if (saved) {
+            saved.x = n.x;
+            saved.y = n.y;
+            saved.vx = n.vx;
+            saved.vy = n.vy;
+          }
         }
       });
     };
 
-    // Render pass
+    // Render loop
     const render = () => {
       simulate();
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvas.width / dpr;
+      const height = canvas.height / dpr;
+
+      ctx.clearRect(0, 0, width, height);
       ctx.save();
 
       // Pan & Zoom transform
-      ctx.translate(canvas.width / 2 + cameraX, canvas.height / 2 + cameraY);
+      ctx.translate(width / 2 + cameraX, height / 2 + cameraY);
       ctx.scale(zoom, zoom);
 
       const isDark = theme === 'dark';
@@ -210,13 +266,13 @@ export const KnowledgeGraph: React.FC = () => {
           if (link.type === 'reference') {
             ctx.strokeStyle = isHighlighted
               ? isDark ? '#38bdf8' : '#0284c7'
-              : isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(2, 132, 199, 0.15)';
-            ctx.lineWidth = 2;
+              : isDark ? 'rgba(56, 189, 248, 0.2)' : 'rgba(2, 132, 199, 0.2)';
+            ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
           } else {
             ctx.strokeStyle = isHighlighted
-              ? isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.12)'
-              : isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)';
+              ? isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.14)'
+              : isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)';
             ctx.lineWidth = 1;
             ctx.setLineDash([]);
           }
@@ -239,7 +295,10 @@ export const KnowledgeGraph: React.FC = () => {
           // Current active document
           ctx.fillStyle = '#3b82f6';
           ctx.shadowColor = '#3b82f6';
-          ctx.shadowBlur = 12;
+          ctx.shadowBlur = 10;
+        } else if (node.type === 'folder') {
+          ctx.fillStyle = isDark ? '#f59e0b' : '#d97706';
+          ctx.shadowBlur = 0;
         } else if (node.type === 'document') {
           ctx.fillStyle = isDark ? '#a855f7' : '#9333ea';
           ctx.shadowBlur = 0;
@@ -254,14 +313,15 @@ export const KnowledgeGraph: React.FC = () => {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Label for documents or highlighted matches
-        if (node.type === 'document' || isMatch || node === hoveredNode) {
-          ctx.font = `${node.type === 'document' ? 'bold 12px' : '10px'} system-ui, -apple-system, sans-serif`;
+        // Label for folders, documents or highlighted matches
+        const isHovered = hoveredNodeIdRef.current === node.id;
+        if (node.type === 'document' || node.type === 'folder' || isMatch || isHovered) {
+          ctx.font = `${node.type === 'document' || node.type === 'folder' ? 'bold 12px' : '10px'} system-ui, -apple-system, sans-serif`;
           ctx.fillStyle = isDark
             ? isMatch ? '#f4f4f5' : '#71717a'
-            : isMatch ? '#18181b' : '#a1a1aa';
+            : isMatch ? '#18181b' : '#71717a';
           ctx.textAlign = 'center';
-          ctx.fillText(node.text, x, y + radius + 14);
+          ctx.fillText(node.text, x, y + radius + 13);
         }
       });
 
@@ -276,8 +336,8 @@ export const KnowledgeGraph: React.FC = () => {
       const rect = canvas.getBoundingClientRect();
       const clientX = e.clientX - rect.left;
       const clientY = e.clientY - rect.top;
-      const worldX = (clientX - canvas.width / 2 - cameraX) / zoom;
-      const worldY = (clientY - canvas.height / 2 - cameraY) / zoom;
+      const worldX = (clientX - rect.width / 2 - cameraX) / zoom;
+      const worldY = (clientY - rect.height / 2 - cameraY) / zoom;
       return { clientX, clientY, worldX, worldY };
     };
 
@@ -307,31 +367,44 @@ export const KnowledgeGraph: React.FC = () => {
         draggedNode.y = worldY;
         draggedNode.vx = 0;
         draggedNode.vy = 0;
+        const saved = nodePhysicsRef.current.get(draggedNode.id);
+        if (saved) {
+          saved.x = worldX;
+          saved.y = worldY;
+          saved.vx = 0;
+          saved.vy = 0;
+        }
         return;
       }
 
       if (isDragging) {
         cameraX = clientX - dragStartX;
         cameraY = clientY - dragStartY;
+        cameraRef.current.x = cameraX;
+        cameraRef.current.y = cameraY;
         return;
       }
 
-      // Check hover
+      // Check hover (only trigger React state change when hovered ID actually changes)
       const hovered = nodes.find((n) => {
         const dx = (n.x || 0) - worldX;
         const dy = (n.y || 0) - worldY;
         return Math.sqrt(dx * dx + dy * dy) <= (n.radius || 10) + 4;
       });
-      setHoveredNode(hovered || null);
+
+      const nextHoveredId = hovered?.id || null;
+      if (nextHoveredId !== hoveredNodeIdRef.current) {
+        hoveredNodeIdRef.current = nextHoveredId;
+        setHoveredNode(hovered || null);
+      }
     };
 
     const handleMouseUp = (e: MouseEvent) => {
       const { worldX, worldY } = getCanvasCoords(e);
       if (draggedNode) {
-        // If release was quick click without moving much, navigate to it!
         const dx = (draggedNode.x || 0) - worldX;
         const dy = (draggedNode.y || 0) - worldY;
-        if (Math.sqrt(dx * dx + dy * dy) < 5) {
+        if (Math.hypot(dx, dy) < 4) {
           zoomIntoRem(draggedNode.id);
         }
         draggedNode = null;
@@ -341,14 +414,15 @@ export const KnowledgeGraph: React.FC = () => {
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
       zoom = Math.max(0.2, Math.min(3, zoom * zoomFactor));
+      cameraRef.current.zoom = zoom;
     };
 
     canvas.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('wheel', handleWheel);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
       cancelAnimationFrame(animationFrameId);
@@ -358,7 +432,7 @@ export const KnowledgeGraph: React.FC = () => {
       window.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('wheel', handleWheel);
     };
-  }, [nodes, links, searchQuery, selectedTag, theme, rems, activeRemId, zoomIntoRem]);
+  }, [nodes, links, searchQuery, selectedTag, theme, rems, zoomIntoRem]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden">
@@ -381,7 +455,7 @@ export const KnowledgeGraph: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search concepts or nodes..."
+              placeholder="Search concepts or notes..."
               className="pl-8 pr-3 py-1.5 w-48 sm:w-64 text-xs rounded-xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 outline-none focus:border-blue-500 shadow-sm"
             />
           </div>
@@ -407,13 +481,18 @@ export const KnowledgeGraph: React.FC = () => {
       </div>
 
       {/* Main Canvas */}
-      <canvas ref={canvasRef} className="flex-1 w-full h-full cursor-grab active:cursor-grabbing" />
+      <canvas ref={canvasRef} className="flex-1 w-full h-full cursor-grab active:cursor-grabbing block" />
 
       {/* Floating Hover Tooltip */}
       {hoveredNode && (
         <div className="absolute bottom-6 left-6 z-10 p-3 rounded-xl bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 shadow-xl max-w-xs space-y-1 animate-in fade-in">
-          <div className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-            {hoveredNode.text}
+          <div className="text-xs font-bold text-zinc-900 dark:text-white truncate flex items-center gap-1.5">
+            {hoveredNode.type === 'folder' ? (
+              <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            ) : (
+              <BookOpen className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            )}
+            <span className="truncate">{hoveredNode.text}</span>
           </div>
           <div className="text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
             <span className="capitalize">{hoveredNode.type}</span>
@@ -428,6 +507,9 @@ export const KnowledgeGraph: React.FC = () => {
 
       {/* Graph Legend */}
       <div className="absolute bottom-6 right-6 z-10 px-3 py-2 rounded-xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 shadow-md text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center gap-4">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Folder
+        </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" /> Document
         </span>

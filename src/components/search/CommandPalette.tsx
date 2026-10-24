@@ -10,7 +10,8 @@ import {
   Calendar, 
   Tag, 
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Folder
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { SearchResult } from '@/types';
@@ -57,6 +58,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: <Plus className="w-4 h-4 text-blue-500" />,
       action: async () => {
         const id = await createRem(null, undefined, 'Untitled Note', 'document');
+        zoomIntoRem(id);
+        onClose();
+      },
+    },
+    {
+      id: 'action-new-folder',
+      title: 'Create New Folder',
+      subtitle: 'Organize documents and subfolders',
+      icon: <Folder className="w-4 h-4 text-amber-500" />,
+      action: async () => {
+        const id = await createRem(null, undefined, 'New Folder', 'folder');
         zoomIntoRem(id);
         onClose();
       },
@@ -168,8 +180,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 shrink-0">
-                      <FileText className="w-4 h-4" />
+                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                      res.rem.type === 'folder' 
+                        ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400' 
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                    }`}>
+                      {res.rem.type === 'folder' ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-semibold truncate">
