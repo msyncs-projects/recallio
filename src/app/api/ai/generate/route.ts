@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
 
     const provider: AiProvider = config?.provider || (process.env.GEMINI_API_KEY ? 'gemini' : 'builtin');
     const apiKey = config?.apiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || '';
-    let model = config?.model || (provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash');
+    let model = config?.model || (provider === 'openai' ? 'gpt-4o-mini' : 'gemini-3.8-flash');
     const baseUrl = config?.baseUrl || '';
 
     // Auto-alias deprecated models to recommended current versions

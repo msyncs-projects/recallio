@@ -53,7 +53,7 @@ export const RemItem: React.FC<RemItemProps> = ({
 
   const rem = rems.find((r) => r.id === remId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(rem?.text === '');
   const [localText, setLocalText] = useState(rem?.text || '');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
@@ -61,6 +61,13 @@ export const RemItem: React.FC<RemItemProps> = ({
   const [slashMenuPos, setSlashMenuPos] = useState({ top: 0, left: 0 });
   const [showCardPreview, setShowCardPreview] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+
+  // Automatically start in edit mode if empty
+  useEffect(() => {
+    if (rem && rem.text === '') {
+      setIsEditing(true);
+    }
+  }, [rem?.id]);
 
   // Sync local text with external changes when not actively typing
   useEffect(() => {
@@ -87,34 +94,40 @@ export const RemItem: React.FC<RemItemProps> = ({
     const val = e.target.value;
 
     // Instant Markdown shortcut prefix detection at beginning of rem
-    if (val === '# ') {
+    if (val.startsWith('# ') && rem.type !== 'header1') {
+      const rest = val.slice(2);
       updateRemType(rem.id, 'header1');
-      setLocalText('');
-      updateRemText(rem.id, '');
+      setLocalText(rest);
+      updateRemText(rem.id, rest);
       return;
     }
-    if (val === '## ') {
+    if (val.startsWith('## ') && rem.type !== 'header2') {
+      const rest = val.slice(3);
       updateRemType(rem.id, 'header2');
-      setLocalText('');
-      updateRemText(rem.id, '');
+      setLocalText(rest);
+      updateRemText(rem.id, rest);
       return;
     }
-    if (val === '### ') {
+    if (val.startsWith('### ') && rem.type !== 'header3') {
+      const rest = val.slice(4);
       updateRemType(rem.id, 'header3');
-      setLocalText('');
-      updateRemText(rem.id, '');
+      setLocalText(rest);
+      updateRemText(rem.id, rest);
       return;
     }
-    if (val === '[] ' || val === '[ ] ') {
-      if (!rem.isTodo) toggleTodo(rem.id);
-      setLocalText('');
-      updateRemText(rem.id, '');
+    if ((val.startsWith('[] ') || val.startsWith('[ ] ')) && !rem.isTodo) {
+      const prefixLen = val.startsWith('[ ] ') ? 4 : 3;
+      const rest = val.slice(prefixLen);
+      toggleTodo(rem.id);
+      setLocalText(rest);
+      updateRemText(rem.id, rest);
       return;
     }
-    if (val === '- ' && rem.type !== 'bullet') {
+    if (val.startsWith('- ') && rem.type !== 'bullet') {
+      const rest = val.slice(2);
       updateRemType(rem.id, 'bullet');
-      setLocalText('');
-      updateRemText(rem.id, '');
+      setLocalText(rest);
+      updateRemText(rem.id, rest);
       return;
     }
 
@@ -336,10 +349,16 @@ export const RemItem: React.FC<RemItemProps> = ({
       if (localText !== rem.text) {
         await updateRemText(rem.id, localText);
       }
+      setIsEditing(false);
       const newRemId = await createRem(rem.parentId || activeRemId, rem.id, '', 'bullet');
       setTimeout(() => {
         const el = document.getElementById(`rem-input-${newRemId}`);
-        if (el) (el as HTMLTextAreaElement).focus();
+        if (el) {
+          (el as HTMLTextAreaElement).focus();
+        } else {
+          const div = document.querySelector(`[data-rem-id="${newRemId}"] [data-rem-text-display]`);
+          if (div) (div as HTMLElement).click();
+        }
       }, 50);
       return;
     }
@@ -373,12 +392,23 @@ export const RemItem: React.FC<RemItemProps> = ({
     // Backspace: Delete empty Rem
     if (e.key === 'Backspace' && localText.trim() === '' && !hasChildren) {
       e.preventDefault();
+      const allRemNodes = Array.from(document.querySelectorAll('[data-rem-id]'));
+      const currIdx = allRemNodes.findIndex((n) => n.getAttribute('data-rem-id') === rem.id);
       await deleteRem(rem.id);
-      // Focus previous element
-      const inputs = Array.from(document.querySelectorAll('textarea[id^="rem-input-"]'));
-      const currIdx = inputs.findIndex((i) => i.id === `rem-input-${rem.id}`);
       if (currIdx > 0) {
-        (inputs[currIdx - 1] as HTMLTextAreaElement).focus();
+        const prevNode = allRemNodes[currIdx - 1];
+        const prevId = prevNode.getAttribute('data-rem-id');
+        if (prevId) {
+          setTimeout(() => {
+            const input = document.getElementById(`rem-input-${prevId}`);
+            if (input) {
+              (input as HTMLTextAreaElement).focus();
+            } else {
+              const div = prevNode.querySelector('[data-rem-text-display]');
+              if (div) (div as HTMLElement).click();
+            }
+          }, 30);
+        }
       }
       return;
     }
@@ -386,13 +416,25 @@ export const RemItem: React.FC<RemItemProps> = ({
     // Arrow Up: Move to previous line
     if (e.key === 'ArrowUp' && textareaRef.current) {
       if (textareaRef.current.selectionStart === 0) {
-        const inputs = Array.from(document.querySelectorAll('textarea[id^="rem-input-"]'));
-        const currIdx = inputs.findIndex((i) => i.id === `rem-input-${rem.id}`);
+        const allRemNodes = Array.from(document.querySelectorAll('[data-rem-id]'));
+        const currIdx = allRemNodes.findIndex((n) => n.getAttribute('data-rem-id') === rem.id);
         if (currIdx > 0) {
           e.preventDefault();
-          const target = inputs[currIdx - 1] as HTMLTextAreaElement;
-          target.focus();
-          target.setSelectionRange(target.value.length, target.value.length);
+          setIsEditing(false);
+          const prevNode = allRemNodes[currIdx - 1];
+          const prevId = prevNode.getAttribute('data-rem-id');
+          if (prevId) {
+            setTimeout(() => {
+              const input = document.getElementById(`rem-input-${prevId}`);
+              if (input) {
+                (input as HTMLTextAreaElement).focus();
+                (input as HTMLTextAreaElement).setSelectionRange((input as HTMLTextAreaElement).value.length, (input as HTMLTextAreaElement).value.length);
+              } else {
+                const div = prevNode.querySelector('[data-rem-text-display]');
+                if (div) (div as HTMLElement).click();
+              }
+            }, 30);
+          }
         }
       }
     }
@@ -400,13 +442,25 @@ export const RemItem: React.FC<RemItemProps> = ({
     // Arrow Down: Move to next line
     if (e.key === 'ArrowDown' && textareaRef.current) {
       if (textareaRef.current.selectionStart === localText.length) {
-        const inputs = Array.from(document.querySelectorAll('textarea[id^="rem-input-"]'));
-        const currIdx = inputs.findIndex((i) => i.id === `rem-input-${rem.id}`);
-        if (currIdx !== -1 && currIdx < inputs.length - 1) {
+        const allRemNodes = Array.from(document.querySelectorAll('[data-rem-id]'));
+        const currIdx = allRemNodes.findIndex((n) => n.getAttribute('data-rem-id') === rem.id);
+        if (currIdx !== -1 && currIdx < allRemNodes.length - 1) {
           e.preventDefault();
-          const target = inputs[currIdx + 1] as HTMLTextAreaElement;
-          target.focus();
-          target.setSelectionRange(0, 0);
+          setIsEditing(false);
+          const nextNode = allRemNodes[currIdx + 1];
+          const nextId = nextNode.getAttribute('data-rem-id');
+          if (nextId) {
+            setTimeout(() => {
+              const input = document.getElementById(`rem-input-${nextId}`);
+              if (input) {
+                (input as HTMLTextAreaElement).focus();
+                (input as HTMLTextAreaElement).setSelectionRange(0, 0);
+              } else {
+                const div = nextNode.querySelector('[data-rem-text-display]');
+                if (div) (div as HTMLElement).click();
+              }
+            }, 30);
+          }
         }
       }
     }
@@ -555,7 +609,10 @@ export const RemItem: React.FC<RemItemProps> = ({
       : '';
 
   return (
-    <div className={`relative group/rem transition-colors ${isSelected ? 'bg-blue-50/70 dark:bg-blue-950/40 ring-1 ring-blue-500/50 rounded-xl px-1' : ''}`}>
+    <div
+      data-rem-id={rem.id}
+      className={`relative group/rem transition-colors ${isSelected ? 'bg-blue-50/70 dark:bg-blue-950/40 ring-1 ring-blue-500/50 rounded-xl px-1' : ''}`}
+    >
       {/* Indentation Guidelines */}
       {depth > 0 && (
         <div
@@ -683,6 +740,7 @@ export const RemItem: React.FC<RemItemProps> = ({
             </div>
           ) : (
             <div
+              data-rem-text-display
               onClick={() => setIsEditing(true)}
               className={`min-h-[26px] cursor-text rounded px-1 -mx-1 hover:bg-zinc-200/40 dark:hover:bg-zinc-800/60 transition-colors ${
                 rem.isCompleted ? 'line-through opacity-60' : ''
@@ -751,8 +809,17 @@ export const RemItem: React.FC<RemItemProps> = ({
         <div className="opacity-0 group-hover/rem:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
           <button
             type="button"
-            onClick={() => {
-              createRem(rem.parentId || activeRemId, rem.id, '', 'bullet');
+            onClick={async () => {
+              const newRemId = await createRem(rem.parentId || activeRemId, rem.id, '', 'bullet');
+              setTimeout(() => {
+                const el = document.getElementById(`rem-input-${newRemId}`);
+                if (el) {
+                  (el as HTMLTextAreaElement).focus();
+                } else {
+                  const div = document.querySelector(`[data-rem-id="${newRemId}"] [data-rem-text-display]`);
+                  if (div) (div as HTMLElement).click();
+                }
+              }, 50);
             }}
             title="Add sibling below"
             className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 cursor-pointer"

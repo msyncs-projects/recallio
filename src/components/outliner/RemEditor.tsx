@@ -192,13 +192,24 @@ export const RemEditor: React.FC = () => {
       setTimeout(() => {
         if (activeRem && activeRem.type !== 'folder') {
           if (activeRem.childrenIds && activeRem.childrenIds.length > 0) {
-            const firstInput = document.getElementById(`rem-input-${activeRem.childrenIds[0]}`);
-            if (firstInput) firstInput.focus();
+            const firstId = activeRem.childrenIds[0];
+            const firstInput = document.getElementById(`rem-input-${firstId}`);
+            if (firstInput) {
+              (firstInput as HTMLTextAreaElement).focus();
+            } else {
+              const div = document.querySelector(`[data-rem-id="${firstId}"] [data-rem-text-display]`);
+              if (div) (div as HTMLElement).click();
+            }
           } else {
             createRem(activeRem.id, undefined, '', 'bullet').then((id) => {
               setTimeout(() => {
                 const el = document.getElementById(`rem-input-${id}`);
-                if (el) el.focus();
+                if (el) {
+                  (el as HTMLTextAreaElement).focus();
+                } else {
+                  const div = document.querySelector(`[data-rem-id="${id}"] [data-rem-text-display]`);
+                  if (div) (div as HTMLElement).click();
+                }
               }, 50);
             });
           }
@@ -634,7 +645,18 @@ export const RemEditor: React.FC = () => {
         <div className="pt-2">
           <button
             type="button"
-            onClick={() => createRem(activeRem.id, undefined, '', 'bullet')}
+            onClick={async () => {
+              const newId = await createRem(activeRem.id, undefined, '', 'bullet');
+              setTimeout(() => {
+                const el = document.getElementById(`rem-input-${newId}`);
+                if (el) {
+                  (el as HTMLTextAreaElement).focus();
+                } else {
+                  const div = document.querySelector(`[data-rem-id="${newId}"] [data-rem-text-display]`);
+                  if (div) (div as HTMLElement).click();
+                }
+              }, 50);
+            }}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-blue-500 py-1 px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />

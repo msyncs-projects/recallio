@@ -101,7 +101,7 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
   });
   const [aiConfig, setAiConfig] = useState<AiConfig>({
     provider: 'gemini',
-    model: 'gemini-1.5-flash',
+    model: 'gemini-3.8-flash',
     apiKey: '',
     baseUrl: '',
   });

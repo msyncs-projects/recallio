@@ -22,7 +22,7 @@ export const AiSettingsPanel: React.FC = () => {
   const { aiConfig, saveAiConfig } = useRem();
 
   const [provider, setProvider] = useState<AiProvider>(aiConfig.provider || 'gemini');
-  const [model, setModel] = useState<string>(aiConfig.model || 'gemini-1.5-flash');
+  const [model, setModel] = useState<string>(aiConfig.model || 'gemini-3.8-flash');
   const [apiKey, setApiKey] = useState<string>(aiConfig.apiKey || '');
   const [baseUrl, setBaseUrl] = useState<string>(aiConfig.baseUrl || '');
   const [showKey, setShowKey] = useState(false);
@@ -34,8 +34,8 @@ export const AiSettingsPanel: React.FC = () => {
   // Model options per provider
   const modelPresets: Record<AiProvider, Array<{ id: string; name: string; badge?: string }>> = {
     gemini: [
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', badge: 'Recommended • Fast & Free' },
-      { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', badge: 'Latest • Next-Gen Speed' },
+      { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', badge: 'Recommended • Next-Gen Speed' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', badge: 'Stable' },
       { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', badge: 'Deep Reasoning' },
     ],
     openai: [
