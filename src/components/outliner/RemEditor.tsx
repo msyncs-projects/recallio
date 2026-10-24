@@ -14,11 +14,18 @@ import {
   Calendar,
   Folder,
   FolderOpen,
-  FileText
+  FileText,
+  UploadCloud,
+  Video,
+  FileUp,
+  Globe,
+  Wand2
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { Rem } from '@/types';
 import { RemItem } from './RemItem';
+import { AiAssistantModal } from '@/components/modals/AiAssistantModal';
+import { ImportSourceModal } from '@/components/modals/ImportSourceModal';
 
 export const RemEditor: React.FC = () => {
   const {
@@ -40,6 +47,13 @@ export const RemEditor: React.FC = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleText, setTitleText] = useState(activeRem?.text || '');
   const [formattedDate, setFormattedDate] = useState('');
+
+  // AI & Import Modals state
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiModalMode, setAiModalMode] = useState<'flashcards' | 'summary' | 'expand' | 'qa'>('flashcards');
+  const [aiTargetRemId, setAiTargetRemId] = useState<string | undefined>(undefined);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importModalTab, setImportModalTab] = useState<'pdf' | 'web' | 'youtube'>('pdf');
 
   // Keep title in sync when activeRem changes
   React.useEffect(() => {
@@ -89,6 +103,13 @@ export const RemEditor: React.FC = () => {
     .filter(Boolean) as Rem[];
   const childDocsAndFolders = childRems.filter((r) => r.type === 'document' || r.type === 'folder');
   const childBullets = childRems.filter((r) => r.type !== 'document' && r.type !== 'folder');
+
+  // Detect embedded YouTube video
+  const youtubeVideoId = React.useMemo(() => {
+    const fullText = (activeRem?.text || '') + ' ' + childRems.map((r) => r.text).join(' ');
+    const match = fullText.match(/(?:youtu\.be\/|watch\?v=|embed\/)([a-zA-Z0-9_\-]{11})/);
+    return match ? match[1] : null;
+  }, [activeRem, childRems]);
 
   const handleTitleBlur = () => {
     setIsEditingTitle(false);
@@ -169,14 +190,43 @@ export const RemEditor: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {/* AI Assistant Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setAiModalMode('flashcards');
+                setAiTargetRemId(activeRem.id);
+                setIsAiModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+              title="Auto-Generate Flashcards & Summaries with AI"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>AI Assistant</span>
+            </button>
+
+            {/* Import Source Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setImportModalTab('pdf');
+                setIsImportModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
+              title="Import PDF, Web Page or YouTube Video"
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="hidden sm:inline">Import</span>
+            </button>
+
             {/* Folder Actions */}
             {isFolder && (
               <>
                 <button
                   type="button"
                   onClick={() => createRem(activeRem.id, undefined, 'Untitled Note', 'document')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50 hover:bg-blue-100 transition-colors cursor-pointer"
                   title="Create a new document inside this folder"
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -185,7 +235,7 @@ export const RemEditor: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => createRem(activeRem.id, undefined, 'New Folder', 'folder')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 hover:bg-amber-100 transition-colors cursor-pointer"
                   title="Create a new subfolder inside this folder"
                 >
                   <Folder className="w-3.5 h-3.5" />
@@ -262,10 +312,36 @@ export const RemEditor: React.FC = () => {
       {/* If Folder: Display Contained Documents & Subfolders Grid */}
       {isFolder && (
         <div className="mb-10 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Contents ({childDocsAndFolders.length})
             </h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportModalTab('pdf');
+                  setIsImportModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+              >
+                <UploadCloud className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Import Source</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAiModalMode('flashcards');
+                  setAiTargetRemId(activeRem.id);
+                  setIsAiModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>AI Cards from Folder</span>
+              </button>
+            </div>
           </div>
 
           {childDocsAndFolders.length > 0 ? (
@@ -311,7 +387,7 @@ export const RemEditor: React.FC = () => {
             <div className="py-8 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
               <Folder className="w-8 h-8 mx-auto text-amber-400/60" />
               <p className="text-xs text-zinc-400">This folder is currently empty.</p>
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => createRem(activeRem.id, undefined, 'Untitled Note', 'document')}
@@ -328,9 +404,49 @@ export const RemEditor: React.FC = () => {
                   <Folder className="w-3.5 h-3.5" />
                   <span>Create Subfolder</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportModalTab('pdf');
+                    setIsImportModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                >
+                  <UploadCloud className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Import Source</span>
+                </button>
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Embedded YouTube Player (if YouTube document) */}
+      {youtubeVideoId && (
+        <div className="mb-6 rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-black shadow-xl">
+          <div className="aspect-video w-full">
+            <iframe
+              src={`https://www.youtube.com/embed/${youtubeVideoId}`}
+              title="YouTube Video Player"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full border-0"
+            />
+          </div>
+          <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-300">
+            <div className="flex items-center gap-2">
+              <Video className="w-4 h-4 text-rose-500 shrink-0" />
+              <span className="font-semibold">Interactive Video Note</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => createRem(activeRem.id, undefined, '[00:00] Note :: Definition', 'bullet')}
+              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 text-rose-400" />
+              <span>Add Timestamp Note</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -350,6 +466,15 @@ export const RemEditor: React.FC = () => {
                 remId={childId}
                 depth={0}
                 isLastSibling={idx === arr.length - 1}
+                onOpenAiModal={(mode, id) => {
+                  setAiModalMode(mode);
+                  setAiTargetRemId(id || activeRem.id);
+                  setIsAiModalOpen(true);
+                }}
+                onOpenImportModal={(type) => {
+                  setImportModalTab(type);
+                  setIsImportModalOpen(true);
+                }}
               />
             ))
         ) : null}
@@ -434,6 +559,22 @@ export const RemEditor: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* AI Assistant Modal */}
+      <AiAssistantModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        targetRemId={aiTargetRemId}
+        initialMode={aiModalMode}
+      />
+
+      {/* Import Source Modal (PDF, Web, YouTube) */}
+      <ImportSourceModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        targetFolderId={isFolder ? activeRem.id : activeRem.parentId}
+        initialTab={importModalTab}
+      />
     </div>
   );
 };

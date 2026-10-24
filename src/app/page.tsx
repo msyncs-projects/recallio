@@ -9,12 +9,15 @@ import { FlashcardReview } from '@/components/flashcards/FlashcardReview';
 import { KnowledgeGraph } from '@/components/graph/KnowledgeGraph';
 import { CommandPalette } from '@/components/search/CommandPalette';
 import { ImportExportModal } from '@/components/modals/ImportExportModal';
+import { ImportSourceModal } from '@/components/modals/ImportSourceModal';
 import { AuthModal } from '@/components/auth/AuthModal';
 
 function MainApp() {
   const { isInitialized, activeView } = useRem();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  const [isImportSourceOpen, setIsImportSourceOpen] = useState(false);
+  const [importSourceTargetFolderId, setImportSourceTargetFolderId] = useState<string | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -52,6 +55,10 @@ function MainApp() {
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenImportExport={() => setIsImportExportOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenImportSource={(folderId) => {
+          setImportSourceTargetFolderId(folderId || null);
+          setIsImportSourceOpen(true);
+        }}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
@@ -98,6 +105,12 @@ function MainApp() {
       <ImportExportModal
         isOpen={isImportExportOpen}
         onClose={() => setIsImportExportOpen(false)}
+      />
+
+      <ImportSourceModal
+        isOpen={isImportSourceOpen}
+        onClose={() => setIsImportSourceOpen(false)}
+        targetFolderId={importSourceTargetFolderId}
       />
 
       <AuthModal

@@ -21,11 +21,15 @@ interface RemItemProps {
   remId: string;
   depth?: number;
   isLastSibling?: boolean;
+  onOpenAiModal?: (mode: 'flashcards' | 'summary' | 'expand', remId?: string) => void;
+  onOpenImportModal?: (type: 'pdf' | 'web' | 'youtube', remId?: string) => void;
 }
 
 export const RemItem: React.FC<RemItemProps> = ({
   remId,
   depth = 0,
+  onOpenAiModal,
+  onOpenImportModal,
 }) => {
   const {
     rems,
@@ -48,6 +52,8 @@ export const RemItem: React.FC<RemItemProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [localText, setLocalText] = useState(rem?.text || '');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [slashMenuPos, setSlashMenuPos] = useState({ top: 0, left: 0 });
   const [showCardPreview, setShowCardPreview] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
@@ -77,20 +83,167 @@ export const RemItem: React.FC<RemItemProps> = ({
     const val = e.target.value;
     setLocalText(val);
 
-    // Trigger slash menu if ends with /
-    if (val.endsWith('/') && textareaRef.current) {
-      const rect = textareaRef.current.getBoundingClientRect();
-      setSlashMenuPos({ top: rect.bottom, left: rect.left + 20 });
-      setShowSlashMenu(true);
-    } else {
-      setShowSlashMenu(false);
+    // Trigger slash command menu if / is typed
+    const slashIdx = val.lastIndexOf('/');
+    if (slashIdx !== -1) {
+      const beforeSlash = val.slice(0, slashIdx);
+      if (slashIdx === 0 || /\s$/.test(beforeSlash)) {
+        const query = val.slice(slashIdx + 1);
+        if (!/\s/.test(query) && query.length < 20) {
+          setSlashQuery(query);
+          setSlashSelectedIndex(0);
+          setShowSlashMenu(true);
+          if (textareaRef.current) {
+            const rect = textareaRef.current.getBoundingClientRect();
+            setSlashMenuPos({ top: rect.bottom, left: rect.left + 10 });
+          }
+          return;
+        }
+      }
     }
+    setShowSlashMenu(false);
   };
 
   const handleBlur = () => {
-    setIsEditing(false);
-    if (localText !== rem.text) {
-      updateRemText(rem.id, localText);
+    // Small delay to allow slash menu click events without unmounting
+    setTimeout(() => {
+      if (!showSlashMenu) {
+        setIsEditing(false);
+        if (localText !== rem.text) {
+          updateRemText(rem.id, localText);
+        }
+      }
+    }, 120);
+  };
+
+  const executeSlashAction = (actionId: string) => {
+    const slashIdx = localText.lastIndexOf('/');
+    if (slashIdx === -1) {
+      setShowSlashMenu(false);
+      return;
+    }
+
+    const beforeSlash = localText.slice(0, slashIdx);
+    const afterSlash = localText.slice(slashIdx + 1 + slashQuery.length);
+    const cleanedText = (beforeSlash + afterSlash).trimStart();
+
+    setShowSlashMenu(false);
+
+    if (actionId === 'todo') {
+      toggleTodo(rem.id);
+      setLocalText(cleanedText);
+      updateRemText(rem.id, cleanedText);
+      setTimeout(() => textareaRef.current?.focus(), 20);
+      return;
+    }
+
+    if (actionId === 'h1' || actionId === 'h2' || actionId === 'header1' || actionId === 'header2' || actionId === 'bullet') {
+      const mappedType = (actionId === 'h1' || actionId === 'header1') ? 'header1' : (actionId === 'h2' || actionId === 'header2') ? 'header2' : 'bullet';
+      updateRemType(rem.id, mappedType);
+      setLocalText(cleanedText);
+      updateRemText(rem.id, cleanedText);
+      setTimeout(() => textareaRef.current?.focus(), 20);
+      return;
+    }
+
+    if (actionId === 'concept') {
+      const newText = beforeSlash + ' :: ' + afterSlash;
+      setLocalText(newText);
+      updateRemText(rem.id, newText);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const pos = beforeSlash.length + 4;
+          textareaRef.current.setSelectionRange(pos, pos);
+        }
+      }, 20);
+      return;
+    }
+
+    if (actionId === 'bidirectional') {
+      const newText = beforeSlash + ' ::: ' + afterSlash;
+      setLocalText(newText);
+      updateRemText(rem.id, newText);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const pos = beforeSlash.length + 5;
+          textareaRef.current.setSelectionRange(pos, pos);
+        }
+      }, 20);
+      return;
+    }
+
+    if (actionId === 'cloze') {
+      const newText = beforeSlash + '{{}}' + afterSlash;
+      setLocalText(newText);
+      updateRemText(rem.id, newText);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const pos = beforeSlash.length + 2;
+          textareaRef.current.setSelectionRange(pos, pos);
+        }
+      }, 20);
+      return;
+    }
+
+    if (actionId === 'code') {
+      const newText = beforeSlash + '`code`' + afterSlash;
+      setLocalText(newText);
+      updateRemText(rem.id, newText);
+      setTimeout(() => textareaRef.current?.focus(), 20);
+      return;
+    }
+
+    if (actionId === 'math') {
+      const newText = beforeSlash + '$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$' + afterSlash;
+      setLocalText(newText);
+      updateRemText(rem.id, newText);
+      setTimeout(() => textareaRef.current?.focus(), 20);
+      return;
+    }
+
+    if (actionId === 'link') {
+      const newText = beforeSlash + '[[]]' + afterSlash;
+      setLocalText(newText);
+      updateRemText(rem.id, newText);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const pos = beforeSlash.length + 2;
+          textareaRef.current.setSelectionRange(pos, pos);
+        }
+      }, 20);
+      return;
+    }
+
+    if (actionId === 'ai-cards') {
+      setLocalText(cleanedText);
+      updateRemText(rem.id, cleanedText);
+      onOpenAiModal?.('flashcards', rem.id);
+      return;
+    }
+
+    if (actionId === 'ai-summary') {
+      setLocalText(cleanedText);
+      updateRemText(rem.id, cleanedText);
+      onOpenAiModal?.('summary', rem.id);
+      return;
+    }
+
+    if (actionId === 'ai-expand') {
+      setLocalText(cleanedText);
+      updateRemText(rem.id, cleanedText);
+      onOpenAiModal?.('expand', rem.id);
+      return;
+    }
+
+    if (actionId === 'pdf' || actionId === 'youtube' || actionId === 'web') {
+      setLocalText(cleanedText);
+      updateRemText(rem.id, cleanedText);
+      onOpenImportModal?.(actionId, rem.id);
+      return;
     }
   };
 
@@ -99,8 +252,30 @@ export const RemItem: React.FC<RemItemProps> = ({
       if (e.key === 'Escape') {
         setShowSlashMenu(false);
         e.preventDefault();
+        return;
       }
-      return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => prev + 1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // Trigger action based on query or default order
+        const actionsList = [
+          'todo', 'concept', 'bidirectional', 'cloze', 'h1', 'h2', 'bullet',
+          'ai-cards', 'ai-summary', 'ai-expand', 'youtube', 'pdf', 'web', 'code', 'math', 'link'
+        ];
+        const filtered = actionsList.filter((a) => a.toLowerCase().includes(slashQuery.toLowerCase()));
+        const targetAction = filtered[slashSelectedIndex % Math.max(1, filtered.length)] || filtered[0] || 'todo';
+        executeSlashAction(targetAction);
+        return;
+      }
     }
 
     // Enter: Create sibling beneath
@@ -371,10 +546,23 @@ export const RemItem: React.FC<RemItemProps> = ({
               {showSlashMenu && (
                 <SlashMenu
                   position={slashMenuPos}
+                  query={slashQuery}
+                  selectedIndex={slashSelectedIndex}
+                  onSelectIndex={setSlashSelectedIndex}
                   onClose={() => setShowSlashMenu(false)}
-                  onInsertText={handleInsertTextFromSlash}
-                  onSetRemType={(type) => updateRemType(rem.id, type)}
-                  onToggleTodo={() => toggleTodo(rem.id)}
+                  onInsertText={(text) => {
+                    if (text === ' :: ') executeSlashAction('concept');
+                    else if (text === ' ::: ') executeSlashAction('bidirectional');
+                    else if (text === '{{}}') executeSlashAction('cloze');
+                    else if (text === '`code`') executeSlashAction('code');
+                    else if (text.startsWith('$$')) executeSlashAction('math');
+                    else if (text === '[[]]') executeSlashAction('link');
+                    else executeSlashAction('concept');
+                  }}
+                  onSetRemType={(type) => executeSlashAction(type)}
+                  onToggleTodo={() => executeSlashAction('todo')}
+                  onTriggerAi={(mode) => executeSlashAction(`ai-${mode}`)}
+                  onTriggerImport={(type) => executeSlashAction(type)}
                 />
               )}
             </div>
@@ -476,6 +664,8 @@ export const RemItem: React.FC<RemItemProps> = ({
               remId={childId}
               depth={depth + 1}
               isLastSibling={idx === rem.childrenIds.length - 1}
+              onOpenAiModal={onOpenAiModal}
+              onOpenImportModal={onOpenImportModal}
             />
           ))}
         </div>

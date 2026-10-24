@@ -13,6 +13,9 @@ export interface Rem {
   isCompleted?: boolean;
   codeLanguage?: string; // if code block
   portalRemId?: string; // if embedding another Rem
+  sourceType?: 'pdf' | 'youtube' | 'web';
+  sourceUrl?: string;
+  sourceData?: string; // PDF data URL or extracted metadata
   createdAt: number;
   updatedAt: number;
 }

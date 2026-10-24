@@ -24,7 +24,8 @@ import {
   User as UserIcon,
   LogIn,
   Folder,
-  FolderOpen
+  FolderOpen,
+  UploadCloud
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { Rem } from '@/types';
@@ -33,6 +34,7 @@ interface SidebarProps {
   onOpenSearch: () => void;
   onOpenImportExport: () => void;
   onOpenAuth: () => void;
+  onOpenImportSource?: (folderId?: string | null) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
 }
@@ -41,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSearch,
   onOpenImportExport,
   onOpenAuth,
+  onOpenImportSource,
   isOpenMobile,
   onCloseMobile,
 }) => {
@@ -156,6 +159,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <div className="font-semibold leading-tight">New Folder</div>
           <div className="text-[10px] text-zinc-400 dark:text-zinc-500">Organize documents</div>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setOpenMenuTarget(null);
+          onOpenImportSource?.(parentId);
+        }}
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left text-zinc-700 dark:text-zinc-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer group"
+      >
+        <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+          <UploadCloud className="w-3.5 h-3.5" />
+        </div>
+        <div>
+          <div className="font-semibold leading-tight">Import Source...</div>
+          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">PDF, Web, YouTube</div>
         </div>
       </button>
     </div>
