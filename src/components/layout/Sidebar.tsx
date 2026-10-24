@@ -17,14 +17,19 @@ import {
   ChevronDown, 
   HardDrive, 
   Sparkles,
-  BookOpen
+  BookOpen,
+  Cloud,
+  LogOut,
+  RefreshCw,
+  User as UserIcon,
+  LogIn
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
-import { Rem } from '@/types';
 
 interface SidebarProps {
   onOpenSearch: () => void;
   onOpenImportExport: () => void;
+  onOpenAuth: () => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
 }
@@ -32,6 +37,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSearch,
   onOpenImportExport,
+  onOpenAuth,
   isOpenMobile,
   onCloseMobile,
 }) => {
@@ -45,6 +51,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setActiveView,
     zoomIntoRem,
     createRem,
+    user,
+    syncStatus,
+    syncWithCloud,
+    logout,
   } = useRem();
 
   const [expandedDocIds, setExpandedDocIds] = useState<Set<string>>(new Set(['doc-rea', 'doc-welcome']));
@@ -108,14 +118,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div>
               <div className="font-extrabold text-sm text-zinc-900 dark:text-white tracking-tight flex items-center gap-1.5">
-                <span>RemNote</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded font-mono font-medium bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                  CLONE
-                </span>
+                <span>MnemoFlow</span>
               </div>
               <div className="text-[10px] text-zinc-400 font-medium flex items-center gap-1">
                 <HardDrive className="w-2.5 h-2.5 text-emerald-500" />
-                <span>Local-First DB</span>
+                <span>Outliner & Spaced Repetition</span>
               </div>
             </div>
           </div>
@@ -362,26 +369,100 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* Bottom User & Workspace Footer */}
-        <div className="p-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
-          <button
-            type="button"
-            onClick={onOpenImportExport}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
-            title="Backup and Restore Data"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span>Settings & Backup</span>
-          </button>
+        {/* User Account & Cloud Sync Section */}
+        <div className="p-3 border-t border-zinc-100 dark:border-zinc-800/80 space-y-2">
+          {user ? (
+            <div className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    {user.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
+                      {user.name}
+                    </div>
+                    <div className="text-[10px] text-zinc-400 truncate">
+                      {user.email}
+                    </div>
+                  </div>
+                </div>
 
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
-            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          >
-            {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
-          </button>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="p-1 rounded text-zinc-400 hover:text-rose-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Sync status badge & sync trigger */}
+              <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50 text-[10px]">
+                <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      syncStatus === 'synced'
+                        ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50'
+                        : syncStatus === 'syncing'
+                        ? 'bg-amber-500 animate-pulse'
+                        : 'bg-zinc-400'
+                    }`}
+                  />
+                  <span>{syncStatus === 'syncing' ? 'Syncing...' : 'PostgreSQL Cloud'}</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => syncWithCloud()}
+                  disabled={syncStatus === 'syncing'}
+                  className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline cursor-pointer disabled:opacity-50"
+                  title="Synchronize with Cloud DB"
+                >
+                  <RefreshCw className={`w-2.5 h-2.5 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                  <span>Sync</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-900/60 text-blue-700 dark:text-blue-300 transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-blue-500" />
+                <div className="text-left">
+                  <div className="text-xs font-bold leading-tight">Sign In / Register</div>
+                  <div className="text-[10px] text-blue-500/80">Enable Cloud DB & Sync</div>
+                </div>
+              </div>
+              <LogIn className="w-3.5 h-3.5 text-blue-500 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          )}
+
+          {/* Bottom Settings & Theme Controls */}
+          <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 pt-1">
+            <button
+              type="button"
+              onClick={onOpenImportExport}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+              title="Backup and Restore Data"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Data & Backup</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
       </aside>
     </>

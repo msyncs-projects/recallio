@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  avatar       String?
+  role         String   @default("user")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  rems  Rem[]
+  cards Card[]
+
+  @@map("users")
+}
+
+model Rem {
+  id          String   @id
+  userId      String
+  text        String
+  parentId    String?
+  childrenIds String[] @default([])
+  type        String   @default("bullet")
+  isCollapsed Boolean  @default(false)
+  tags        String[] @default([])
+  isPinned    Boolean  @default(false)
+  isTodo      Boolean  @default(false)
+  isCompleted Boolean  @default(false)
+  createdAt   BigInt
+  updatedAt   BigInt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards Card[]
+
+  @@index([userId])
+  @@index([parentId])
+  @@map("rems")
+}
+
+model Card {
+  id               String  @id
+  userId           String
+  remId            String
+  type             String
+  front            String
+  back             String
+  clozeIndex       Int?
+  state            String  @default("new")
+  nextPracticeDate BigInt
+  interval         Float   @default(0)
+  easeFactor       Float   @default(2.5)
+  repetitions      Int     @default(0)
+  lapses           Int     @default(0)
+  lastPracticed    BigInt?
+  history          Json?   @default("[]")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rem  Rem  @relation(fields: [remId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([remId])
+  @@index([nextPracticeDate])
+  @@map("cards")
+}

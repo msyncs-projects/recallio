@@ -7,6 +7,17 @@ import { syncCardsForRem, extractReferences, extractTags } from '@/lib/cardParse
 import { calculateNextSRSState } from '@/lib/srs';
 
 export type ActiveView = 'editor' | 'flashcards' | 'graph' | 'all-notes' | 'settings';
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  role: string;
+  totalRems?: number;
+  totalCards?: number;
+}
 
 interface RemContextType {
   isInitialized: boolean;
@@ -21,6 +32,14 @@ interface RemContextType {
   stats: StudyStats;
   breadcrumbs: BreadcrumbItem[];
   theme: 'dark' | 'light';
+  
+  // User & Cloud Sync
+  user: UserProfile | null;
+  syncStatus: SyncStatus;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  syncWithCloud: () => Promise<boolean>;
   
   // Navigation
   setActiveRemId: (id: string) => void;
@@ -59,6 +78,8 @@ const RemContext = createContext<RemContextType | null>(null);
 
 export function RemProvider({ children }: { children: React.ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [rems, setRems] = useState<Rem[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -73,6 +94,143 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
     dueCardsCount: 0,
     retentionRate: 94,
   });
+
+  // Pull cloud notes and update local DB
+  const pullCloudData = useCallback(async () => {
+    try {
+      setSyncStatus('syncing');
+      const res = await fetch('/api/sync');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.rems && data.rems.length > 0) {
+          await db.transaction('rw', db.rems, db.cards, async () => {
+            await db.rems.clear();
+            await db.cards.clear();
+            await db.rems.bulkAdd(data.rems);
+            if (data.cards) await db.cards.bulkAdd(data.cards);
+          });
+          setRems(data.rems);
+          setCards(data.cards || []);
+        }
+        setSyncStatus('synced');
+      } else {
+        setSyncStatus('idle');
+      }
+    } catch {
+      setSyncStatus('error');
+    }
+  }, []);
+
+  // Push local notes to cloud
+  const pushCloudData = useCallback(async (currentRems: Rem[], currentCards: Card[]) => {
+    try {
+      setSyncStatus('syncing');
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rems: currentRems, cards: currentCards }),
+      });
+      if (res.ok) {
+        setSyncStatus('synced');
+      } else {
+        setSyncStatus('error');
+      }
+    } catch {
+      setSyncStatus('error');
+    }
+  }, []);
+
+  const syncWithCloud = useCallback(async (): Promise<boolean> => {
+    try {
+      setSyncStatus('syncing');
+      // If client has notes, push them; also pull
+      const localRems = await db.rems.toArray();
+      const localCards = await db.cards.toArray();
+      
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rems: localRems, cards: localCards }),
+      });
+      if (res.ok) {
+        setSyncStatus('synced');
+        return true;
+      }
+      setSyncStatus('error');
+      return false;
+    } catch {
+      setSyncStatus('error');
+      return false;
+    }
+  }, []);
+
+  // Check active user session on load
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            setUser(data.user);
+            pullCloudData();
+          }
+        }
+      } catch {
+        // Guest mode / offline
+      }
+    }
+    checkAuth();
+  }, [pullCloudData]);
+
+  // Auth actions
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Login failed' };
+      }
+      setUser(data.user);
+      await pullCloudData();
+      return { success: true };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : 'Login failed' };
+    }
+  }, [pullCloudData]);
+
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Registration failed' };
+      }
+      setUser(data.user);
+      await pullCloudData();
+      return { success: true };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : 'Registration failed' };
+    }
+  }, [pullCloudData]);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+      setSyncStatus('idle');
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+  }, []);
 
   // Load database on mount
   const refreshFromDB = useCallback(async () => {
@@ -658,6 +816,12 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
     <RemContext.Provider
       value={{
         isInitialized,
+        user,
+        syncStatus,
+        login,
+        register,
+        logout,
+        syncWithCloud,
         rems,
         cards,
         activeRemId,

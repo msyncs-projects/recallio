@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'RemNote - Outliner & Spaced Repetition Knowledge Base',
+  title: 'MnemoFlow - Outliner & Spaced Repetition Knowledge Base',
   description:
-    'All-in-one outliner note-taking with automatic spaced repetition flashcards, 2D knowledge graph, and local-first persistence.',
+    'All-in-one outliner note-taking with automatic spaced repetition flashcards, 2D knowledge graph, and cloud-synced persistence.',
 };
 
 export default function RootLayout({

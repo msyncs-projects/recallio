@@ -1,6 +1,6 @@
-# 🧠 RemNote Clone (Local-First & Vercel Ready)
+# 🧠 MnemoFlow (`mnemoflow`)
 
-An open-source, high-performance clone of **RemNote** combining a keyboard-driven hierarchical outliner with automatic spaced-repetition (SRS) flashcard generation, interactive 2D knowledge graphs, bidirectional backlinks, and client-side offline persistence.
+An open-source, full-stack clone of **RemNote** combining a keyboard-driven hierarchical outliner with automatic spaced-repetition (SRS) flashcard generation, interactive 2D knowledge graphs, bidirectional backlinks, and **hybrid local-first + PostgreSQL cloud synchronization with multi-user authentication**.
 
 Pre-loaded with deep knowledge models including the **REA Enterprise Ontology & Accounting Framework (Resources, Events, Agents)**, active recall tutorials, and cognitive science notes.
 
@@ -8,7 +8,15 @@ Pre-loaded with deep knowledge models including the **REA Enterprise Ontology & 
 
 ## ✨ Core Features
 
-### 1. The "Rem" Knowledge Model
+### 1. User Management & Authentication
+* **Full Multi-User Isolation**: Each user has their own private knowledge base, flashcards, tags, and study queues.
+* **Email & Password Authentication**: Secure password hashing with `bcryptjs` and stateless HTTP-Only session cookies signed via `jose` (JWT).
+* **Instant Onboarding**: New users automatically receive the complete REA framework and tutorial notes seeded directly into their PostgreSQL account.
+* **Hybrid Local-First Sync**:
+  * Works offline or as a guest in **IndexedDB**.
+  * When logged in, automatically syncs with **PostgreSQL** in real-time.
+
+### 2. The "Rem" Knowledge Model
 * **Hierarchical Outliner**: Infinite nesting with full keyboard workflow:
   * `Enter`: Create a new sibling bullet below.
   * `Tab`: Indent (make child of previous sibling).
@@ -18,14 +26,14 @@ Pre-loaded with deep knowledge models including the **REA Enterprise Ontology & 
   * `Click Bullet`: Zoom into any Rem as its own focused document with active breadcrumb path.
   * `Fold / Unfold`: Smooth collapse and expand of subtrees.
 
-### 2. Automated Flashcard Generation
-Flashcards are generated in real-time as you type notes using RemNote syntax:
+### 3. Automated Flashcard Generation
+Flashcards are generated in real-time as you type notes using outliner syntax:
 * **Concept - Descriptor**: `Concept :: Definition` (Forward card)
 * **Bidirectional Cards**: `Front ::: Back` or `Front <-> Back` (Creates both Front→Back and Back→Front cards)
 * **Cloze Deletion Cards**: `The capital of {{France}} is {{Paris}}` (Creates interactive fill-in-the-blank cards)
 * **Live Card Indicator Badge**: Displays generated cards on the bullet line with a live preview popover.
 
-### 3. Spaced Repetition (SRS) Review Queue
+### 4. Spaced Repetition (SRS) Review Queue
 * SuperMemo SM-2 & Anki-grade scheduling algorithm.
 * Queue broken down into **New**, **Learning**, and **Review** cards.
 * 4-grade rating interface with projected next review dates:
@@ -36,22 +44,22 @@ Flashcards are generated in real-time as you type notes using RemNote syntax:
 * Keyboard shortcuts: `Space` to reveal answer, `1`-`4` to grade.
 * Session celebration (confetti) and streak/retention metrics.
 
-### 4. Interactive 2D Knowledge Graph
+### 5. Interactive 2D Knowledge Graph
 * Dynamic Canvas force-directed graph simulation.
 * Nodes color-coded by document, flashcard presence, and active note.
 * Real-time zoom, pan, and node dragging.
 * Filter by tag (`#accounting`, `#ontology`, `#srs`) or search query.
 * Click any node to open and edit that document instantly.
 
-### 5. Backlinks & Bidirectional References
+### 6. Backlinks & Bidirectional References
 * Link any note using `[[Document Name]]`.
 * Automated Backlinks section showing:
   * **Linked References**: Documents pointing to this Rem.
   * **Unlinked Mentions**: Mentions of the document title with a 1-click "Link" button.
 
-### 6. Local-First & Vercel Deployable
-* **Local-First**: Powered by **IndexedDB (Dexie)** for zero latency, offline-first reliability, and client-side data isolation.
-* **Vercel Ready**: Static & Serverless compatible. Zero configuration required when deploying to Vercel.
+### 7. PostgreSQL Database & Vercel Ready
+* **Prisma ORM** schema supporting PostgreSQL (Vercel Postgres, Neon, Supabase, or local Docker).
+* **Local Docker Container**: Pre-configured and running locally on port 5432.
 * **Full Data Ownership**:
   * Export complete workspace to JSON.
   * Import and restore JSON backups.
@@ -62,40 +70,48 @@ Flashcards are generated in real-time as you type notes using RemNote syntax:
 
 ## 🚀 Getting Started
 
-### Local Development
+### 1. Local Development (with PostgreSQL)
+
+The local PostgreSQL database is already running in Docker on port `5432`.
 
 1. **Install dependencies:**
    ```bash
    npm install
    ```
 
-2. **Start the development server:**
+2. **Sync database schema:**
+   ```bash
+   npx prisma db push
+   ```
+
+3. **Start the development server:**
    ```bash
    npm run dev
    ```
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Production Build & Local Run
-
-```bash
-npm run build
-npm run start
-```
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## ☁️ Deploy to Vercel
+## ☁️ Deploy to Vercel (with Database)
 
-### Option 1: Vercel CLI
+### Step 1: Create a PostgreSQL Database on Vercel
+1. In your [Vercel Dashboard](https://vercel.com), go to the **Storage** tab and click **Create Database** &rarr; select **Vercel Postgres** (or connect a free **Neon** / **Supabase** database).
+2. Note your `DATABASE_URL` connection string (or link the database directly to your Vercel project).
+
+### Step 2: Configure Environment Variables in Vercel
+In your Vercel Project Settings &rarr; **Environment Variables**, add:
+* `DATABASE_URL`: `postgres://...` (your PostgreSQL connection string)
+* `JWT_SECRET`: Any random 32+ character string (e.g. `your-production-jwt-secret-key-32chars`)
+* `NEXT_PUBLIC_APP_NAME`: `MnemoFlow`
+
+### Step 3: Deploy
+Push this repository to GitHub/GitLab:
 ```bash
-npx vercel
+git remote add origin https://github.com/your-username/mnemoflow.git
+git push -u origin main
 ```
-
-### Option 2: GitHub / Vercel Dashboard
-1. Push this repository to GitHub or GitLab.
-2. In [vercel.com](https://vercel.com), click **Add New Project** and import the repository.
-3. Deploy! Next.js will automatically detect the settings and deploy without any database or backend config required.
+Import the repository into Vercel and click **Deploy**. Vercel will build the app and execute database migrations automatically.
 
 ---
 

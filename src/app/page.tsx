@@ -9,11 +9,13 @@ import { FlashcardReview } from '@/components/flashcards/FlashcardReview';
 import { KnowledgeGraph } from '@/components/graph/KnowledgeGraph';
 import { CommandPalette } from '@/components/search/CommandPalette';
 import { ImportExportModal } from '@/components/modals/ImportExportModal';
+import { AuthModal } from '@/components/auth/AuthModal';
 
 function MainApp() {
   const { isInitialized, activeView } = useRem();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Global keyboard shortcut for Command Palette (Cmd+K or Ctrl+K)
@@ -36,7 +38,7 @@ function MainApp() {
             <Sparkles className="w-6 h-6" />
           </div>
           <div className="text-sm font-semibold tracking-wide text-zinc-500 dark:text-zinc-400">
-            Initializing RemNote Knowledge Base...
+            Initializing MnemoFlow Knowledge Base...
           </div>
         </div>
       </div>
@@ -49,6 +51,7 @@ function MainApp() {
       <Sidebar
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenImportExport={() => setIsImportExportOpen(true)}
+        onOpenAuth={() => setIsAuthOpen(true)}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
@@ -65,7 +68,7 @@ function MainApp() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="font-bold text-sm text-zinc-800 dark:text-zinc-200">
-            RemNote
+            MnemoFlow
           </div>
           <button
             type="button"
@@ -95,6 +98,11 @@ function MainApp() {
       <ImportExportModal
         isOpen={isImportExportOpen}
         onClose={() => setIsImportExportOpen(false)}
+      />
+
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
       />
     </div>
   );
