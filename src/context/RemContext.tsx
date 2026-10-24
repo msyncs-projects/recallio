@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Rem, Card, RemType, SRSGrade, BreadcrumbItem, SearchResult, StudyStats, AiConfig } from '@/types';
 import { db, initializeDatabase, resetDatabase, exportDatabaseToJSON, importDatabaseFromJSON } from '@/lib/db';
 import { syncCardsForRem, extractReferences, extractTags } from '@/lib/cardParser';
@@ -224,6 +224,22 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
     }
     checkAuth();
   }, [pullCloudData]);
+
+  // Auto-sync debounced changes to PostgreSQL cloud when user is logged in
+  const isFirstSyncRef = useRef(true);
+  useEffect(() => {
+    if (isFirstSyncRef.current) {
+      isFirstSyncRef.current = false;
+      return;
+    }
+    if (!user || !isInitialized) return;
+
+    const timer = setTimeout(() => {
+      pushCloudData(rems, cards);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [rems, cards, user, isInitialized, pushCloudData]);
 
   // Auth actions
   const login = useCallback(async (email: string, password: string) => {

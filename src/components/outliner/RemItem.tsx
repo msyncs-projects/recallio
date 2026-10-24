@@ -85,6 +85,39 @@ export const RemItem: React.FC<RemItemProps> = ({
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
+
+    // Instant Markdown shortcut prefix detection at beginning of rem
+    if (val === '# ') {
+      updateRemType(rem.id, 'header1');
+      setLocalText('');
+      updateRemText(rem.id, '');
+      return;
+    }
+    if (val === '## ') {
+      updateRemType(rem.id, 'header2');
+      setLocalText('');
+      updateRemText(rem.id, '');
+      return;
+    }
+    if (val === '### ') {
+      updateRemType(rem.id, 'header3');
+      setLocalText('');
+      updateRemText(rem.id, '');
+      return;
+    }
+    if (val === '[] ' || val === '[ ] ') {
+      if (!rem.isTodo) toggleTodo(rem.id);
+      setLocalText('');
+      updateRemText(rem.id, '');
+      return;
+    }
+    if (val === '- ' && rem.type !== 'bullet') {
+      updateRemType(rem.id, 'bullet');
+      setLocalText('');
+      updateRemText(rem.id, '');
+      return;
+    }
+
     setLocalText(val);
 
     // Trigger slash command menu if / is typed
@@ -141,8 +174,23 @@ export const RemItem: React.FC<RemItemProps> = ({
       return;
     }
 
-    if (actionId === 'h1' || actionId === 'h2' || actionId === 'header1' || actionId === 'header2' || actionId === 'bullet') {
-      const mappedType = (actionId === 'h1' || actionId === 'header1') ? 'header1' : (actionId === 'h2' || actionId === 'header2') ? 'header2' : 'bullet';
+    if (
+      actionId === 'h1' ||
+      actionId === 'h2' ||
+      actionId === 'h3' ||
+      actionId === 'header1' ||
+      actionId === 'header2' ||
+      actionId === 'header3' ||
+      actionId === 'bullet'
+    ) {
+      const mappedType =
+        actionId === 'h1' || actionId === 'header1'
+          ? 'header1'
+          : actionId === 'h2' || actionId === 'header2'
+          ? 'header2'
+          : actionId === 'h3' || actionId === 'header3'
+          ? 'header3'
+          : 'bullet';
       updateRemType(rem.id, mappedType);
       setLocalText(cleanedText);
       updateRemText(rem.id, cleanedText);
@@ -496,12 +544,14 @@ export const RemItem: React.FC<RemItemProps> = ({
     });
   };
 
-  const isHeading = rem.type === 'header1' || rem.type === 'header2';
+  const isHeading = rem.type === 'header1' || rem.type === 'header2' || rem.type === 'header3';
   const headingClasses =
     rem.type === 'header1'
       ? 'text-lg font-bold text-zinc-900 dark:text-white'
       : rem.type === 'header2'
       ? 'text-base font-semibold text-zinc-900 dark:text-zinc-100'
+      : rem.type === 'header3'
+      ? 'text-sm font-semibold text-zinc-800 dark:text-zinc-200'
       : '';
 
   return (

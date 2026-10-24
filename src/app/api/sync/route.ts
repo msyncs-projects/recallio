@@ -86,117 +86,118 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid payload structure' }, { status: 400 });
     }
 
-    // Execute in a transaction for data consistency
-    await prisma.$transaction(async (tx) => {
-      // 1. Delete obsolete records no longer in client
-      const incomingRemIds = rems.map((r) => r.id);
-      const incomingCardIds = cards.map((c) => c.id);
+    // 1. Delete obsolete records no longer in client
+    const incomingRemIds = rems.map((r) => r.id);
+    const incomingCardIds = cards.map((c) => c.id);
 
-      await tx.card.deleteMany({
-        where: {
-          userId: authUser.userId,
-          id: { notIn: incomingCardIds },
-        },
-      });
-
-      await tx.rem.deleteMany({
-        where: {
-          userId: authUser.userId,
-          id: { notIn: incomingRemIds },
-        },
-      });
-
-      // 2. Upsert Rems with strict ownership verification (IDOR protection)
-      for (const rem of rems) {
-        const existingRem = await tx.rem.findUnique({
-          where: { id: rem.id },
-          select: { userId: true },
-        });
-
-        if (existingRem && existingRem.userId !== authUser.userId) {
-          // Cross-tenant protection: prevent overwriting another user's note
-          continue;
-        }
-
-        await tx.rem.upsert({
-          where: { id: rem.id },
-          create: {
-            id: rem.id,
-            userId: authUser.userId,
-            text: rem.text,
-            parentId: rem.parentId,
-            childrenIds: rem.childrenIds || [],
-            type: rem.type,
-            isCollapsed: rem.isCollapsed,
-            tags: rem.tags || [],
-            isPinned: !!rem.isPinned,
-            isTodo: !!rem.isTodo,
-            isCompleted: !!rem.isCompleted,
-            createdAt: BigInt(rem.createdAt),
-            updatedAt: BigInt(rem.updatedAt),
-          },
-          update: {
-            text: rem.text,
-            parentId: rem.parentId,
-            childrenIds: rem.childrenIds || [],
-            type: rem.type,
-            isCollapsed: rem.isCollapsed,
-            tags: rem.tags || [],
-            isPinned: !!rem.isPinned,
-            isTodo: !!rem.isTodo,
-            isCompleted: !!rem.isCompleted,
-            updatedAt: BigInt(rem.updatedAt),
-          },
-        });
-      }
-
-      // 3. Upsert Cards with strict ownership verification (IDOR protection)
-      for (const card of cards) {
-        const existingCard = await tx.card.findUnique({
-          where: { id: card.id },
-          select: { userId: true },
-        });
-
-        if (existingCard && existingCard.userId !== authUser.userId) {
-          // Cross-tenant protection: prevent overwriting another user's card
-          continue;
-        }
-
-        await tx.card.upsert({
-          where: { id: card.id },
-          create: {
-            id: card.id,
-            userId: authUser.userId,
-            remId: card.remId,
-            type: card.type,
-            front: card.front,
-            back: card.back,
-            clozeIndex: card.clozeIndex ?? null,
-            state: card.state,
-            nextPracticeDate: BigInt(card.nextPracticeDate),
-            interval: card.interval,
-            easeFactor: card.easeFactor,
-            repetitions: card.repetitions,
-            lapses: card.lapses,
-            lastPracticed: card.lastPracticed ? BigInt(card.lastPracticed) : null,
-            history: (card.history as object) || [],
-          },
-          update: {
-            front: card.front,
-            back: card.back,
-            clozeIndex: card.clozeIndex ?? null,
-            state: card.state,
-            nextPracticeDate: BigInt(card.nextPracticeDate),
-            interval: card.interval,
-            easeFactor: card.easeFactor,
-            repetitions: card.repetitions,
-            lapses: card.lapses,
-            lastPracticed: card.lastPracticed ? BigInt(card.lastPracticed) : null,
-            history: (card.history as object) || [],
-          },
-        });
-      }
+    await prisma.card.deleteMany({
+      where: {
+        userId: authUser.userId,
+        id: { notIn: incomingCardIds },
+      },
     });
+
+    await prisma.rem.deleteMany({
+      where: {
+        userId: authUser.userId,
+        id: { notIn: incomingRemIds },
+      },
+    });
+
+    // 2. Filter out any records claimed by other users (IDOR defense)
+    const foreignRems = incomingRemIds.length > 0
+      ? await prisma.rem.findMany({
+          where: {
+            id: { in: incomingRemIds },
+            userId: { not: authUser.userId },
+          },
+          select: { id: true },
+        })
+      : [];
+    const forbiddenRemIds = new Set(foreignRems.map((r) => r.id));
+    const safeRems = rems.filter((r) => !forbiddenRemIds.has(r.id));
+
+    // 3. Upsert Rems in concurrent chunks for high throughput without transaction timeouts
+    const CHUNK_SIZE = 15;
+    for (let i = 0; i < safeRems.length; i += CHUNK_SIZE) {
+      const chunk = safeRems.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((rem) =>
+          prisma.rem.upsert({
+            where: { id: rem.id },
+            create: {
+              id: rem.id,
+              userId: authUser.userId,
+              text: rem.text,
+              parentId: rem.parentId,
+              childrenIds: rem.childrenIds || [],
+              type: rem.type,
+              isCollapsed: rem.isCollapsed,
+              tags: rem.tags || [],
+              isPinned: !!rem.isPinned,
+              isTodo: !!rem.isTodo,
+              isCompleted: !!rem.isCompleted,
+              createdAt: BigInt(rem.createdAt),
+              updatedAt: BigInt(rem.updatedAt),
+            },
+            update: {
+              text: rem.text,
+              parentId: rem.parentId,
+              childrenIds: rem.childrenIds || [],
+              type: rem.type,
+              isCollapsed: rem.isCollapsed,
+              tags: rem.tags || [],
+              isPinned: !!rem.isPinned,
+              isTodo: !!rem.isTodo,
+              isCompleted: !!rem.isCompleted,
+              updatedAt: BigInt(rem.updatedAt),
+            },
+          })
+        )
+      );
+    }
+
+    // 4. Upsert Cards in concurrent chunks
+    for (let i = 0; i < cards.length; i += CHUNK_SIZE) {
+      const chunk = cards.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((card) =>
+          prisma.card.upsert({
+            where: { id: card.id },
+            create: {
+              id: card.id,
+              userId: authUser.userId,
+              remId: card.remId,
+              type: card.type,
+              front: card.front,
+              back: card.back,
+              clozeIndex: card.clozeIndex ?? null,
+              state: card.state,
+              nextPracticeDate: BigInt(card.nextPracticeDate),
+              interval: card.interval,
+              easeFactor: card.easeFactor,
+              repetitions: card.repetitions,
+              lapses: card.lapses,
+              lastPracticed: card.lastPracticed ? BigInt(card.lastPracticed) : null,
+              history: (card.history as object) || [],
+            },
+            update: {
+              front: card.front,
+              back: card.back,
+              clozeIndex: card.clozeIndex ?? null,
+              state: card.state,
+              nextPracticeDate: BigInt(card.nextPracticeDate),
+              interval: card.interval,
+              easeFactor: card.easeFactor,
+              repetitions: card.repetitions,
+              lapses: card.lapses,
+              lastPracticed: card.lastPracticed ? BigInt(card.lastPracticed) : null,
+              history: (card.history as object) || [],
+            },
+          })
+        )
+      );
+    }
 
     return NextResponse.json({ success: true, count: rems.length, syncedAt: Date.now() });
   } catch (error) {

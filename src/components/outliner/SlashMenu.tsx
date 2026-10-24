@@ -7,6 +7,7 @@ import {
   EyeOff, 
   Heading1, 
   Heading2, 
+  Heading3, 
   CheckSquare, 
   Code, 
   Sigma, 
@@ -37,7 +38,7 @@ interface SlashMenuProps {
   onSelectIndex: (index: number) => void;
   onClose: () => void;
   onInsertText: (textToInsert: string) => void;
-  onSetRemType: (type: 'bullet' | 'header1' | 'header2') => void;
+  onSetRemType: (type: 'bullet' | 'header1' | 'header2' | 'header3') => void;
   onToggleTodo: () => void;
   onTriggerAi: (mode: 'flashcards' | 'summary' | 'expand') => void;
   onTriggerImport: (type: 'pdf' | 'web' | 'youtube') => void;
@@ -93,6 +94,18 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
       icon: <Heading2 className="w-4 h-4 text-purple-500" />,
       action: () => {
         onSetRemType('header2');
+        onClose();
+      },
+    },
+    {
+      id: 'h3',
+      category: 'Formatting',
+      label: 'Heading 3',
+      detail: 'Small section heading',
+      shortcut: '###',
+      icon: <Heading3 className="w-4 h-4 text-emerald-500" />,
+      action: () => {
+        onSetRemType('header3');
         onClose();
       },
     },

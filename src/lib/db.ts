@@ -329,6 +329,12 @@ export function getInitialSeedData(): { rems: Rem[]; cards: Card[] } {
  * Ensures the database is initialized with seed data if empty
  */
 export async function initializeDatabase(): Promise<void> {
+  const isInitialized = await db.settings.get('has_initialized_db');
+  if (isInitialized && isInitialized.value === true) {
+    // Already initialized previously - never resurrect deleted notes even if count is 0!
+    return;
+  }
+
   const count = await db.rems.count();
   if (count === 0) {
     const { rems, cards } = getInitialSeedData();
@@ -346,6 +352,7 @@ export async function initializeDatabase(): Promise<void> {
       } as StudyStats,
     });
   }
+  await db.settings.put({ key: 'has_initialized_db', value: true });
 }
 
 /**

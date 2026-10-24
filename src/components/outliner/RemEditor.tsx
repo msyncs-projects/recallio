@@ -32,6 +32,7 @@ export const RemEditor: React.FC = () => {
   const {
     activeRem,
     activeRemId,
+    setActiveRemId,
     breadcrumbs,
     zoomIntoRem,
     updateRemText,
@@ -97,9 +98,38 @@ export const RemEditor: React.FC = () => {
 
   if (!activeRem) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-400">
-        <FolderTree className="w-12 h-12 mb-3 text-zinc-300 dark:text-zinc-700 animate-pulse" />
-        <p className="text-base font-medium">Select or create a document to start writing</p>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-400 max-w-md mx-auto space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 mb-2 shadow-inner">
+          <FolderTree className="w-8 h-8 text-indigo-500" />
+        </div>
+        <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200">Kein Dokument ausgewählt</h2>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+          Wähle ein Dokument aus der Seitenleiste oder erstelle direkt ein neues Dokument oder einen Ordner, um Notizen zu erfassen.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2.5 pt-2 w-full justify-center">
+          <button
+            type="button"
+            onClick={async () => {
+              const newId = await createRem(null, undefined, 'Neues Dokument', 'document');
+              setActiveRemId(newId);
+            }}
+            className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Neues Dokument</span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const newId = await createRem(null, undefined, 'Neuer Ordner', 'folder');
+              setActiveRemId(newId);
+            }}
+            className="px-4 py-2 text-xs font-medium bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Folder className="w-3.5 h-3.5 text-amber-500" />
+            <span>Neuer Ordner</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -143,20 +173,26 @@ export const RemEditor: React.FC = () => {
     return match ? match[1] : null;
   }, [activeRem, childRems]);
 
-  const handleTitleBlur = () => {
+  const saveTitle = async () => {
     setIsEditingTitle(false);
-    if (titleText !== activeRem.text) {
-      updateRemText(activeRem.id, titleText);
+    const trimmed = titleText.trim();
+    if (trimmed && activeRem && trimmed !== activeRem.text) {
+      await updateRemText(activeRem.id, trimmed);
     }
   };
 
-  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleTitleBlur = () => {
+    saveTitle();
+  };
+
+  const handleTitleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      e.currentTarget.blur();
-      // Create first child if empty
-      if (activeRem.childrenIds.length === 0) {
-        createRem(activeRem.id, undefined, '', isFolder ? 'document' : 'bullet');
-      }
+      e.preventDefault();
+      await saveTitle();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (activeRem) setTitleText(activeRem.text);
+      setIsEditingTitle(false);
     }
   };
 

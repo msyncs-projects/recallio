@@ -27,7 +27,8 @@ import {
   FolderOpen,
   UploadCloud,
   GripVertical,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { useRem } from '@/context/RemContext';
 import { Rem } from '@/types';
@@ -60,6 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setActiveView,
     zoomIntoRem,
     createRem,
+    updateRemText,
     moveRem,
     deleteRem,
     user,
@@ -71,6 +73,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedDocIds, setExpandedDocIds] = useState<Set<string>>(new Set(['doc-rea', 'doc-welcome']));
   // Dropdown menu state: 'header' | 'docs' | 'folder-[id]' | null
   const [openMenuTarget, setOpenMenuTarget] = useState<string | null>(null);
+
+  // Inline rename state in sidebar
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+
+  const handleStartRename = (e: React.MouseEvent, doc: Rem) => {
+    e.stopPropagation();
+    setEditingId(doc.id);
+    setEditingText(doc.text);
+  };
+
+  const handleSaveRename = async (id: string) => {
+    const trimmed = editingText.trim();
+    setEditingId(null);
+    if (trimmed) {
+      await updateRemText(id, trimmed);
+    }
+  };
 
   const handleDeleteItem = async (e: React.MouseEvent, doc: Rem) => {
     e.stopPropagation();
@@ -324,14 +344,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <FileText className="w-3.5 h-3.5 text-zinc-400 group-hover:text-blue-500 shrink-0" />
             )}
 
-            {/* Title */}
-            <span className="truncate">
-              {doc.text.split('::')[0].trim() || (isFolder ? 'Untitled Folder' : 'Untitled Note')}
-            </span>
+            {/* Title / Inline Rename Input */}
+            {editingId === doc.id ? (
+              <input
+                type="text"
+                autoFocus
+                value={editingText}
+                onChange={(e) => setEditingText(e.target.value)}
+                onBlur={() => handleSaveRename(doc.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSaveRename(doc.id);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setEditingId(null);
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full text-xs bg-white dark:bg-zinc-800 border border-blue-500 rounded px-1.5 py-0.5 text-zinc-900 dark:text-white outline-none"
+              />
+            ) : (
+              <span 
+                className="truncate"
+                onDoubleClick={(e) => handleStartRename(e, doc)}
+                title="Doppelklick zum Umbenennen"
+              >
+                {doc.text.split('::')[0].trim() || (isFolder ? 'Untitled Folder' : 'Untitled Note')}
+              </span>
+            )}
           </div>
 
           {/* Action buttons on hover */}
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
+            <button
+              type="button"
+              onClick={(e) => handleStartRename(e, doc)}
+              className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-all cursor-pointer"
+              title="Umbenennen"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+
             {isFolder && (
               <div className="relative create-dropdown-container">
                 <button

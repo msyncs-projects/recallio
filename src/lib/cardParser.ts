@@ -42,43 +42,39 @@ export function parseCardsFromText(remId: string, text: string): ParsedCardDraft
     return drafts;
   }
 
-  // 2. Check for Bidirectional cards: ' ::: ' or ' <-> ' (strict RemNote syntax)
-  const bidirectionalDelimiters = [' ::: ', ' <-> '];
-  for (const delim of bidirectionalDelimiters) {
-    if (text.includes(delim)) {
-      const parts = text.split(delim);
-      if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
-        const sideA = parts[0].trim();
-        const sideB = parts.slice(1).join(delim).trim();
+  // 2. Check for Bidirectional cards: ':::' followed by space (e.g. ' ::: ' or '::: ') or ' <-> '
+  const biMatch = text.match(/^([\s\S]*?)(?:\s*:::\s+|\s+<->\s+)([\s\S]*)$/);
+  if (biMatch) {
+    const sideA = biMatch[1].trim();
+    const sideB = biMatch[2].trim();
+    if (sideA && sideB) {
+      // Forward card
+      drafts.push({
+        idSuffix: 'bi_fwd',
+        type: 'bidirectional',
+        front: sideA,
+        back: sideB,
+      });
 
-        // Forward card
-        drafts.push({
-          idSuffix: 'bi_fwd',
-          type: 'bidirectional',
-          front: sideA,
-          back: sideB,
-        });
+      // Reverse card
+      drafts.push({
+        idSuffix: 'bi_rev',
+        type: 'bidirectional',
+        front: sideB,
+        back: sideA,
+      });
 
-        // Reverse card
-        drafts.push({
-          idSuffix: 'bi_rev',
-          type: 'bidirectional',
-          front: sideB,
-          back: sideA,
-        });
-
-        return drafts;
-      }
+      return drafts;
     }
   }
 
-  // 3. Check for Concept-Descriptor: strictly ' :: ' with surrounding spaces (prevents C++ :: or URLs)
-  if (text.includes(' :: ')) {
-    const parts = text.split(' :: ');
-    if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
-      const front = parts[0].trim();
-      const back = parts.slice(1).join(' :: ').trim();
-
+  // 3. Check for Concept-Descriptor: '::' followed by space (e.g. ' :: ' or ':: ')
+  // Requires at least one space after '::' so C++ std::vector or URLs are never treated as cards
+  const conceptMatch = text.match(/^([\s\S]*?)\s*::\s+([\s\S]*)$/);
+  if (conceptMatch) {
+    const front = conceptMatch[1].trim();
+    const back = conceptMatch[2].trim();
+    if (front && back) {
       drafts.push({
         idSuffix: 'concept',
         type: 'concept_descriptor',
