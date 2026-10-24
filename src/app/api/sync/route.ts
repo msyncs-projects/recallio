@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma, isPrismaConnectionError } from '@/lib/prisma';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { Rem, Card } from '@/types';
 
@@ -63,6 +63,9 @@ export async function GET(req: NextRequest) {
       (error as { digest: string }).digest === 'NEXT_PRERENDER_INTERRUPTED'
     ) {
       throw error;
+    }
+    if (isPrismaConnectionError(error)) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
     console.error('Error fetching sync data:', error);
     return NextResponse.json({ error: 'Failed to sync data from cloud' }, { status: 500 });
@@ -198,6 +201,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, count: rems.length, syncedAt: Date.now() });
   } catch (error) {
     console.error('Error in sync endpoint:', error);
+    if (isPrismaConnectionError(error)) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
+    }
     return NextResponse.json({ error: 'Failed to synchronize with database' }, { status: 500 });
   }
 }

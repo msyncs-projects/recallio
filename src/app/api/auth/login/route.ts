@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma, isPrismaConnectionError } from '@/lib/prisma';
 import { verifyPassword, signToken } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
@@ -66,6 +66,18 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (error) {
     console.error('Error during login:', error);
+
+    if (isPrismaConnectionError(error)) {
+      return NextResponse.json(
+        {
+          error:
+            'Cloud-Datenbank nicht erreichbar: DATABASE_URL ist in Vercel nicht konfiguriert. Du kannst Recallio weiterhin uneingeschränkt lokal im Browser nutzen!',
+          code: 'DATABASE_UNAVAILABLE',
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { error: 'An unexpected error occurred during login' },
       { status: 500 }

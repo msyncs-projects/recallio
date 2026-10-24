@@ -36,8 +36,8 @@ interface RemContextType {
   // User & Cloud Sync
   user: UserProfile | null;
   syncStatus: SyncStatus;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; code?: string }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string; code?: string }>;
   logout: () => Promise<void>;
   syncWithCloud: () => Promise<boolean>;
   
@@ -235,7 +235,7 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        return { success: false, error: data.error || 'Login failed' };
+        return { success: false, error: data.error || 'Login failed', code: data.code };
       }
       setUser(data.user);
       await pullCloudData();
@@ -254,7 +254,7 @@ export function RemProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        return { success: false, error: data.error || 'Registration failed' };
+        return { success: false, error: data.error || 'Registration failed', code: data.code };
       }
       setUser(data.user);
       await pullCloudData();
